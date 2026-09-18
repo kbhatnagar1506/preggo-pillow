@@ -1,0 +1,260 @@
+// Package api serves the dashboard and streams live events to it.
+//
+// Streaming uses Server-Sent Events rather than WebSockets: the dashboard only
+// ever receives, SSE is one stdlib handler with no dependency, and it
+// reconnects on its own. One fewer thing to debug at hour 30.
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/kbhatnagar1506/lull/internal/kicker"
+	"github.com/kbhatnagar1506/lull/internal/store"
+)
+
+// Event is anything pushed to the browser.
+type Event struct {
+	Kind string `json:"kind"` // detection | command | press | trace | status
+	Data any    `json:"data"`
+}
+
+// Hub fans events out to every connected dashboard.
+type Hub struct {
+	mu      sync.RWMutex
+	clients map[chan Event]struct{}
+}
+
+func NewHub() *Hub {
+	return &Hub{clients: make(map[chan Event]struct{})}
+}
+
+func (h *Hub) subscribe() chan Event {
+	ch := make(chan Event, 128)
+	h.mu.Lock()
+	h.clients[ch] = struct{}{}
+	h.mu.Unlock()
+	return ch
+}
+
+func (h *Hub) unsubscribe(ch chan Event) {
+	h.mu.Lock()
+	delete(h.clients, ch)
+	h.mu.Unlock()
+	close(ch)
+}
+
+// Broadcast never blocks. A slow browser drops frames rather than stalling the
+// detector, which is the right trade for a live demo.
+func (h *Hub) Broadcast(e Event) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for ch := range h.clients {
+		select {
+		case ch <- e:
+		default:
+		}
+	}
+}
+
+// Server wires the hub, the store and the kicker to HTTP.
+type Server struct {
+	Hub    *Hub
+	Store  *store.Store
+	Kicker *kicker.Kicker
+	Web    http.FileSystem
+
+	// Fool injects simulated maternal movement. It lands on every node at
+	// once, so a correct detector must reject it. This is the "now watch me
+	// try to fool it" beat in the demo.
+	Fool func()
+
+	mu           sync.Mutex
+	blindStarted time.Time
+	blindEnded   time.Time
+}
+
+func (s *Server) Routes() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/", http.FileServer(s.Web))
+	mux.HandleFunc("/api/stream", s.handleStream)
+	mux.HandleFunc("/api/press", s.handlePress)
+	mux.HandleFunc("/api/kick", s.handleKick)
+	mux.HandleFunc("/api/blind/start", s.handleBlindStart)
+	mux.HandleFunc("/api/blind/stop", s.handleBlindStop)
+	mux.HandleFunc("/api/blind/score", s.handleBlindScore)
+	mux.HandleFunc("/api/nights", s.handleNights)
+	mux.HandleFunc("/api/fool", s.handleFool)
+	return mux
+}
+
+func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ch := s.Hub.subscribe()
+	defer s.Hub.unsubscribe(ch)
+
+	// keepalive so proxies and browsers do not time the stream out
+	ping := time.NewTicker(20 * time.Second)
+	defer ping.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ping.C:
+			fmt.Fprint(w, ": ping\n\n")
+			flusher.Flush()
+		case e := <-ch:
+			b, err := json.Marshal(e)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		}
+	}
+}
+
+// handlePress records a human saying "I felt one". In the demo this is the
+// blind-test input; in the product it is how the model gets its labels.
+func (s *Server) handlePress(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	src := r.URL.Query().Get("source")
+	if src == "" {
+		src = "ui"
+	}
+	if err := s.Store.InsertPress(now, src); err != nil {
+		log.Printf("press insert: %v", err)
+	}
+	s.Hub.Broadcast(Event{Kind: "press", Data: map[string]any{
+		"t_ms": now.UnixMilli(), "source": src,
+	}})
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handleKick is warm-up mode: fire on demand so a judge can trigger one.
+func (s *Server) handleKick(w http.ResponseWriter, r *http.Request) {
+	strength := r.URL.Query().Get("strength")
+	if strength == "" {
+		strength = kicker.Medium
+	}
+	s.Kicker.Fire(strength)
+	writeJSON(w, map[string]any{"ok": true, "strength": strength})
+}
+
+func (s *Server) handleBlindStart(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	s.blindStarted = time.Now()
+	s.blindEnded = time.Time{}
+	s.mu.Unlock()
+	s.Kicker.Start()
+	s.Hub.Broadcast(Event{Kind: "status", Data: map[string]any{"blind": true}})
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleBlindStop(w http.ResponseWriter, r *http.Request) {
+	s.Kicker.Stop()
+	s.mu.Lock()
+	s.blindEnded = time.Now()
+	s.mu.Unlock()
+	s.Hub.Broadcast(Event{Kind: "status", Data: map[string]any{"blind": false}})
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handleBlindScore is the reveal: the machine's hits against the human's, over
+// the same commanded kicks.
+func (s *Server) handleBlindScore(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	from, to := s.blindStarted, s.blindEnded
+	s.mu.Unlock()
+	if from.IsZero() {
+		http.Error(w, "no blind test has been run", http.StatusBadRequest)
+		return
+	}
+	if to.IsZero() {
+		to = time.Now()
+	}
+	score, err := s.Store.ScoreWindow(from, to, 900*time.Millisecond)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	events, err := s.Store.EventsWindow(from, to)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"score":  score,
+		"events": events,
+		"from":   from.UnixMilli(),
+		"to":     to.UnixMilli(),
+	})
+}
+
+func (s *Server) handleFool(w http.ResponseWriter, r *http.Request) {
+	if s.Fool != nil {
+		s.Fool()
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleNights(w http.ResponseWriter, r *http.Request) {
+	nights, err := s.Store.Nights(30)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	baseline, err := s.Store.Baseline(1)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var latest int
+	if len(nights) > 0 {
+		latest = nights[len(nights)-1].KickCount
+	}
+	var deviation float64
+	if baseline > 0 {
+		deviation = (float64(latest) - baseline) / baseline
+	}
+	writeJSON(w, map[string]any{
+		"nights":    nights,
+		"baseline":  baseline,
+		"latest":    latest,
+		"deviation": deviation,
+		// Two consecutive nights, never one. Fetal sleep cycles run 20-40
+		// minutes and babies have genuinely quiet nights, so a single-night
+		// alarm would be noise.
+		"alert": deviation <= -0.25 && consecutiveLow(nights, baseline, 2),
+	})
+}
+
+func consecutiveLow(nights []store.Night, baseline float64, n int) bool {
+	if baseline <= 0 || len(nights) < n {
+		return false
+	}
+	for i := len(nights) - n; i < len(nights); i++ {
+		if float64(nights[i].KickCount) > baseline*0.75 {
+			return false
+		}
+	}
+	return true
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
+}
