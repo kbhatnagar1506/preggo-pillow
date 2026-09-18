@@ -15,12 +15,14 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -38,9 +40,32 @@ func main() {
 		dbPath   = flag.String("db", "data/lull.db", "sqlite path")
 		source   = flag.String("source", "sim", "sensor source: sim | serial")
 		seed     = flag.Bool("seed", true, "seed a simulated 14-night baseline if empty")
-		sampleHz = flag.Int("hz", 100, "sensor sample rate")
+		sampleHz = flag.Int("hz", 100, "sensor sample rate (sim only)")
+
+		ports     = flag.String("ports", "auto", "serial devices, comma separated, or \"auto\" to discover")
+		baud      = flag.Int("baud", 115200, "serial baud rate, must match the sketch")
+		listPorts = flag.Bool("list-ports", false, "print candidate serial devices and exit")
+
+		acousticThreshold = flag.Float64("acoustic-threshold", 0, "acoustic spike threshold above rolling floor; 0 picks a default per source")
+		requireAcoustic   = flag.Bool("require-acoustic", true, "a detection must be confirmed by the contact mic")
+		kickThreshold     = flag.Float64("threshold", 0, "detection residual in g; 0 uses the default")
 	)
 	flag.Parse()
+
+	if *listPorts {
+		found, err := sensor.DiscoverPorts()
+		if err != nil {
+			log.Fatalf("discover ports: %v", err)
+		}
+		if len(found) == 0 {
+			log.Println("no serial devices found. Is the Arduino plugged in and the sketch flashed?")
+			return
+		}
+		for _, p := range found {
+			log.Printf("  %s", p)
+		}
+		return
+	}
 
 	if err := os.MkdirAll("data", 0o755); err != nil {
 		log.Fatalf("mkdir data: %v", err)
@@ -62,29 +87,60 @@ func main() {
 
 	// --- sensor source -------------------------------------------------
 	var src sensor.Source
-	var inject func(float64)
+	var servo kicker.Servo
 	var fool func()
+	defaultAcoustic := 10.0
 
 	switch *source {
 	case "sim":
 		sim := sensor.NewSim(*sampleHz)
 		src = sim
-		inject = sim.InjectKick
+		servo = kicker.SimServo{Inject: sim.InjectKick}
 		fool = func() { sim.InjectMaternal(0.45) }
 		log.Printf("sensor source: SIMULATED at %d Hz", *sampleHz)
+
 	case "serial":
-		log.Fatalf("serial source not wired yet: run with -source=sim until the Arduino nodes are streaming")
+		devs, err := resolvePorts(*ports)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		log.Printf("sensor source: SERIAL on %v at %d baud", devs, *baud)
+		ser, err := sensor.NewSerial(devs, *baud, "")
+		if err != nil {
+			log.Fatalf("serial: %v", err)
+		}
+		src = ser
+		servo = kicker.SerialServo{Send: ser.Kick}
+		// On real hardware there is nothing to fake: shake the phantom with
+		// your hand. That is a better demo anyway.
+		fool = nil
+		// The Grove sound sensor is a 0-1023 analog envelope, so its spike
+		// scale is nothing like the simulator's.
+		defaultAcoustic = 60.0
+
 	default:
 		log.Fatalf("unknown -source %q", *source)
 	}
 	defer src.Close()
 
 	// --- detector ------------------------------------------------------
-	det := detect.New(detect.DefaultConfig())
+	cfg := detect.DefaultConfig()
+	cfg.RequireAcoustic = *requireAcoustic
+	if *acousticThreshold > 0 {
+		cfg.AcousticThreshold = *acousticThreshold
+	} else {
+		cfg.AcousticThreshold = defaultAcoustic
+	}
+	if *kickThreshold > 0 {
+		cfg.Threshold = *kickThreshold
+	}
+	log.Printf("detector: threshold=%.3fg acoustic=%.1f require_acoustic=%v",
+		cfg.Threshold, cfg.AcousticThreshold, cfg.RequireAcoustic)
+	det := detect.New(cfg)
 
 	// --- kicker (the phantom) ------------------------------------------
 	kk := kicker.New(
-		kicker.SimServo{Inject: inject},
+		servo,
 		func(t time.Time, strength string) {
 			if err := st.InsertCommand(t, strength); err != nil {
 				log.Printf("command insert: %v", err)
@@ -139,6 +195,32 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer shutdownCancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+}
+
+// resolvePorts turns the -ports flag into a device list.
+func resolvePorts(spec string) ([]string, error) {
+	if spec != "auto" && spec != "" {
+		var out []string
+		for _, p := range strings.Split(spec, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("-ports %q parsed to nothing", spec)
+		}
+		return out, nil
+	}
+
+	found, err := sensor.DiscoverPorts()
+	if err != nil {
+		return nil, fmt.Errorf("discover ports: %w", err)
+	}
+	if len(found) == 0 {
+		return nil, fmt.Errorf("no serial devices found. Plug in the Arduinos, flash accel_node.ino, " +
+			"then re-run. Use -list-ports to see what is visible.")
+	}
+	return found, nil
 }
 
 // pumpSensors feeds every sample into the detector and streams a decimated

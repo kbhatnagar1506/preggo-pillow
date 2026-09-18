@@ -133,6 +133,36 @@ func (k *Kicker) Fire(strength string) {
 	}
 }
 
+// Angles the servo swings to for each strength. REST is 10 degrees; the
+// sketch clamps to 120. Retune these at hour 6 against the real foam: weak
+// must be genuinely hard for a human to feel, because the weak kicks are what
+// make the blind test land.
+var angles = map[string]int{
+	Weak:   35,
+	Medium: 60,
+	Strong: 95,
+}
+
+// SerialServo drives the real servo on the Arduino that has one.
+//
+// The servo is on the Arduino rather than the Pi because the Pi's software PWM
+// jitters, and jittery kicks poison the ground truth the accuracy number rests
+// on. Arduino has hardware PWM.
+type SerialServo struct {
+	Send func(angle int) error
+}
+
+func (s SerialServo) Kick(strength string, _ float64) error {
+	a, ok := angles[strength]
+	if !ok {
+		a = angles[Medium]
+	}
+	if s.Send == nil {
+		return nil
+	}
+	return s.Send(a)
+}
+
 // SimServo injects impulses into a simulated sensor source.
 type SimServo struct {
 	Inject func(amplitude float64)

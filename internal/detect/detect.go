@@ -103,6 +103,7 @@ type channelState struct {
 	stamps           []time.Time
 	sumX, sumY, sumZ float64
 	current          float64 // magnitude of the high-passed (dynamic) vector
+	seen             bool    // has this node ever produced a usable sample
 }
 
 type acousticState struct {
@@ -191,6 +192,7 @@ func (d *Detector) Feed(r sensor.Reading) {
 	dy := r.AY - st.sumY/n
 	dz := r.AZ - st.sumZ/n
 	st.current = math.Sqrt(dx*dx + dy*dy + dz*dz)
+	st.seen = true
 
 	// Only evaluate on the reference node's arrival, so all three have a
 	// fresh value for the same instant.
@@ -205,14 +207,32 @@ func (d *Detector) evaluate(t time.Time) {
 		return
 	}
 
-	a := d.nodes[sensor.NodeAbdoA].current
-	b := d.nodes[sensor.NodeAbdoB].current
-	ref := d.nodes[sensor.NodeRef].current
+	ref := d.nodes[sensor.NodeRef]
+	if !ref.seen {
+		return // no reference means no subtraction, and no subtraction means
+		// we would be counting maternal movement as fetal movement.
+	}
 
-	// Mean of the abdominal pair minus the reference. When SHE moves, all
-	// three rise together and this cancels toward zero. When the fetus moves,
-	// only the abdominal pair rises and the residual survives.
-	residual := (a+b)/2 - ref
+	// Average only the abdominal nodes that are actually reporting. Two is
+	// better, but one abdominal plus the reference still gives the
+	// subtraction, which is the part that matters. Hard-coding a division by
+	// two would silently halve the residual when a cable comes loose.
+	var sum float64
+	var n int
+	for _, node := range sensor.AbdominalNodes {
+		if st := d.nodes[node]; st.seen {
+			sum += st.current
+			n++
+		}
+	}
+	if n == 0 {
+		return
+	}
+
+	// Mean of the abdominal nodes minus the reference. When SHE moves, every
+	// node rises together and this cancels toward zero. When the fetus moves,
+	// only the abdominal nodes rise and the residual survives.
+	residual := sum/float64(n) - ref.current
 	if residual < d.cfg.Threshold {
 		return
 	}
