@@ -1,13 +1,28 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"time"
 
+	"github.com/kbhatnagar1506/lull/internal/clinical"
 	"github.com/kbhatnagar1506/lull/internal/store"
 )
+
+func str(v any) string { s, _ := v.(string); return s }
+
+func f64(v any) float64 {
+	switch t := v.(type) {
+	case float64:
+		return t
+	case int:
+		return float64(t)
+	}
+	return 0
+}
 
 // handleReport renders the one page she brings to her appointment.
 //
@@ -48,6 +63,33 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The written note is best-effort. The report renders without it.
+	var note string
+	if s.Clinical != nil && s.Clinical.Enabled() {
+		pts := make([]clinical.NightPoint, 0, len(nights))
+		for _, n := range nights {
+			pts = append(pts, clinical.NightPoint{Date: n.Date, Count: n.KickCount})
+		}
+		m := s.maternalStats()
+		cctx, ccancel := context.WithTimeout(r.Context(), 60*time.Second)
+		n, err := s.Clinical.Summarize(cctx, clinical.Input{
+			Nights: pts, Baseline: baseline, Tonight: latest.KickCount,
+			DeviationPct:   deviation,
+			Posture:        str(m["posture"]),
+			SupineMinutes:  f64(m["supine_minutes"]),
+			RespirationRPM: f64(m["respiration_rpm"]),
+			SnorePercent:   f64(m["snore_percent"]),
+			WakeEvents:     int(f64(m["wake_events"])),
+			Alert:          alert,
+		})
+		ccancel()
+		if err != nil {
+			log.Printf("clinical summary: %v", err)
+		} else {
+			note = n
+		}
+	}
+
 	data := reportData{
 		Generated: time.Now().Format("2 January 2006, 15:04"),
 		Nights:    nights,
@@ -57,6 +99,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		Alert:     alert,
 		Simulated: simulated,
 		Maternal:  s.maternalStats(),
+		Note:      note,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -74,6 +117,7 @@ type reportData struct {
 	Alert     bool
 	Simulated bool
 	Maternal  map[string]any
+	Note      string
 }
 
 func (d reportData) DeviationStr() string {
@@ -120,6 +164,11 @@ var reportTmpl = template.Must(template.New("report").Parse(`<!doctype html>
   Movement over the last 14 nights is consistent with this baby's established
   baseline.
 </div>
+{{end}}
+
+{{if .Note}}
+<h2>Summary</h2>
+<p>{{.Note}}</p>
 {{end}}
 
 <h2>Fetal movement</h2>

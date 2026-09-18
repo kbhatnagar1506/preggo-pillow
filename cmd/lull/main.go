@@ -13,6 +13,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -27,11 +28,14 @@ import (
 	"time"
 
 	"github.com/kbhatnagar1506/lull/internal/api"
+	"github.com/kbhatnagar1506/lull/internal/clinical"
 	"github.com/kbhatnagar1506/lull/internal/detect"
 	"github.com/kbhatnagar1506/lull/internal/kicker"
 	"github.com/kbhatnagar1506/lull/internal/maternal"
+	"github.com/kbhatnagar1506/lull/internal/memory"
 	"github.com/kbhatnagar1506/lull/internal/sensor"
 	"github.com/kbhatnagar1506/lull/internal/store"
+	"github.com/kbhatnagar1506/lull/internal/tiger"
 	"github.com/kbhatnagar1506/lull/web"
 )
 
@@ -51,10 +55,18 @@ func main() {
 		requireAcoustic   = flag.Bool("require-acoustic", true, "a detection must be confirmed by the contact mic")
 		kickThreshold     = flag.Float64("threshold", 0, "detection residual in g; 0 uses the default")
 
+		bbKey   = flag.String("backboard-key", "", "Backboard API key; falls back to BACKBOARD_API_KEY")
+		bbID    = flag.String("backboard-assistant", "", "existing Backboard assistant id; found or created by name if empty")
+		envFile = flag.String("env", ".env", "file of KEY=VALUE lines to load before starting")
+
+		tigerURL = flag.String("tiger-url", "", "TigerData/Timescale connection string; falls back to TIGER_DATABASE_URL")
+		deviceID = flag.String("device", "lull-01", "which physical unit this is, so one database can hold many")
+
 		demo = flag.Bool("demo", true, "keep the seeded night fixed so the override demo is stable; "+
 			"set false to roll real detections into tonight's count")
 	)
 	flag.Parse()
+	loadEnv(*envFile)
 
 	if *listPorts {
 		found, err := sensor.DiscoverPorts()
@@ -86,6 +98,30 @@ func main() {
 			log.Printf("seed baseline: %v", err)
 		}
 	}
+
+	// --- narrative memory (Backboard) ----------------------------------
+	// The device remembers the numbers. Backboard remembers the pregnancy.
+	// Entirely optional: with no key, everything below degrades to a log line.
+	memCtx, memCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	mem, _ := memory.New(memCtx, memory.Options{APIKey: *bbKey, AssistantID: *bbID, Name: "Lull"})
+	memCancel()
+	defer mem.Close()
+	rec := memory.NewRecorder(mem)
+
+	// --- longitudinal store (TigerData) --------------------------------
+	// SQLite above is authoritative and offline. Tiger holds the long record:
+	// hypertables for the raw series, and a continuous aggregate that IS the
+	// nightly baseline.
+	tgCtx, tgCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tg, err := tiger.Open(tgCtx, tiger.Options{URL: *tigerURL, Device: *deviceID})
+	tgCancel()
+	if err != nil {
+		log.Printf("tiger: %v", err)
+	}
+	defer tg.Close()
+
+	// --- clinical summary (Gemini on Vertex, via LiteLLM) ---------------
+	clin := clinical.New(clinical.Options{})
 
 	hub := api.NewHub()
 
@@ -168,6 +204,8 @@ func main() {
 
 	go pumpSensors(ctx, src, det, mat, hub)
 	go pumpDetections(ctx, det, st, hub)
+	go recordNightly(ctx, st, mat, rec)
+	go syncToTiger(ctx, st, mat, tg)
 	if !*demo {
 		go rollUpNights(ctx, st)
 	} else {
@@ -181,11 +219,14 @@ func main() {
 	}
 
 	srv := &api.Server{
-		Hub:    hub,
-		Store:  st,
-		Kicker: kk,
-		Web:    http.FS(sub),
-		Fool:   fool,
+		Hub:      hub,
+		Store:    st,
+		Kicker:   kk,
+		Web:      http.FS(sub),
+		Fool:     fool,
+		Memory:   mem,
+		Recorder: rec,
+		Clinical: clin,
 		Maternal: func() map[string]any {
 			st := mat.Stats()
 			return map[string]any{
@@ -220,6 +261,127 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer shutdownCancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+}
+
+// loadEnv reads KEY=VALUE lines so the API key lives in a 0600 file rather than
+// in a shell history or a command line, where it would be visible to every
+// process on the machine.
+func loadEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return // absent is normal
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.Trim(strings.TrimSpace(v), `"'`)
+		if _, exists := os.LookupEnv(k); !exists {
+			_ = os.Setenv(k, v)
+		}
+	}
+}
+
+// recordNightly writes the salient events to narrative memory: what the night
+// came to against her own baseline, her own state, and any alert.
+//
+// Once per night, never per reading. A memory per detected kick would be
+// thousands of identical rows, and recall over that returns nothing useful.
+func recordNightly(ctx context.Context, st *store.Store, mat *maternal.Tracker, rec *memory.Recorder) {
+	tick := time.NewTicker(60 * time.Second)
+	defer tick.Stop()
+
+	write := func() {
+		nights, err := st.Nights(14)
+		if err != nil || len(nights) == 0 {
+			return
+		}
+		baseline, err := st.Baseline(1)
+		if err != nil || baseline <= 0 {
+			return
+		}
+		latest := nights[len(nights)-1]
+		dev := (float64(latest.KickCount) - baseline) / baseline * 100
+
+		rec.Night(latest.Date, latest.KickCount, baseline, dev)
+
+		if ms := mat.Stats(); ms.Ready {
+			rec.Maternal(latest.Date, ms.Posture, ms.SupineMinutes,
+				ms.RespirationRPM, ms.SnorePercent, ms.WakeEvents)
+		}
+
+		// Two consecutive nights, never one: fetal sleep cycles run 20-40
+		// minutes and babies have genuinely quiet nights.
+		if dev <= -25 && len(nights) >= 2 &&
+			float64(nights[len(nights)-2].KickCount) <= baseline*0.75 {
+			rec.Alert(latest.Date, latest.KickCount, baseline, dev, 2)
+		}
+	}
+
+	write() // once at startup so a demo has something to recall immediately
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			write()
+		}
+	}
+}
+
+// syncToTiger ships detections to the longitudinal store in batches.
+//
+// Local-first: SQLite is written first and is authoritative, and the watermark
+// only advances after the remote write succeeds. Being offline costs a larger
+// catch-up batch and nothing else.
+func syncToTiger(ctx context.Context, st *store.Store, mat *maternal.Tracker, tg *tiger.Store) {
+	if !tg.Enabled() {
+		return
+	}
+	tick := time.NewTicker(20 * time.Second)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			rows, err := st.UnsyncedDetections(2000)
+			if err != nil || len(rows) == 0 {
+				continue
+			}
+			batch := make([]tiger.Detection, 0, len(rows))
+			for _, r := range rows {
+				batch = append(batch, tiger.Detection{
+					T: r.T, Residual: r.Residual, Confidence: r.Confidence, Acoustic: r.Acoustic,
+				})
+			}
+			sctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+			if err := tg.SyncDetections(sctx, batch); err != nil {
+				cancel()
+				log.Printf("tiger: sync failed (%v), will retry", err)
+				continue
+			}
+			if err := st.MarkSynced(rows[len(rows)-1].ID); err != nil {
+				log.Printf("tiger: watermark: %v", err)
+			}
+			if ms := mat.Stats(); ms.Ready {
+				_ = tg.RecordMaternal(sctx, time.Now(), ms.Posture, ms.SupineMinutes,
+					ms.RespirationRPM, ms.SnorePercent, ms.WakeEvents)
+			}
+			_ = tg.Refresh(sctx)
+			cancel()
+			log.Printf("tiger: synced %d detections", len(batch))
+		}
+	}
 }
 
 // resolvePorts turns the -ports flag into a device list.

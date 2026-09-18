@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS presses (
 );
 CREATE INDEX IF NOT EXISTS idx_presses_t ON presses(t_ms);
 
+CREATE TABLE IF NOT EXISTS sync_state (
+  name    TEXT PRIMARY KEY,
+  last_id INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS nights (
   night_date TEXT PRIMARY KEY,
   kick_count INTEGER NOT NULL,
@@ -279,4 +284,52 @@ func (s *Store) CountDetectionsOn(day string) (int, error) {
 	err = s.db.QueryRow(
 		`SELECT COUNT(*) FROM detections WHERE t_ms >= ? AND t_ms < ?`, from, to).Scan(&n)
 	return n, err
+}
+
+// DetectionRow is one detection waiting to be shipped to the longitudinal store.
+type DetectionRow struct {
+	ID         int64
+	T          time.Time
+	Residual   float64
+	Confidence float64
+	Acoustic   bool
+}
+
+// UnsyncedDetections returns detections newer than the sync watermark.
+//
+// A watermark rather than a boolean column: it is one integer, it survives a
+// crash, and a period offline costs nothing but a larger catch-up batch.
+func (s *Store) UnsyncedDetections(limit int) ([]DetectionRow, error) {
+	var last int64
+	_ = s.db.QueryRow(`SELECT last_id FROM sync_state WHERE name='tiger'`).Scan(&last)
+
+	rows, err := s.db.Query(`
+SELECT id, t_ms, residual, confidence, acoustic FROM detections
+WHERE id > ? ORDER BY id LIMIT ?`, last, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DetectionRow
+	for rows.Next() {
+		var d DetectionRow
+		var tms int64
+		var ac int
+		if err := rows.Scan(&d.ID, &tms, &d.Residual, &d.Confidence, &ac); err != nil {
+			return nil, err
+		}
+		d.T = time.UnixMilli(tms)
+		d.Acoustic = ac == 1
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// MarkSynced advances the watermark, only after the remote write succeeded.
+func (s *Store) MarkSynced(lastID int64) error {
+	_, err := s.db.Exec(`
+INSERT INTO sync_state(name, last_id) VALUES('tiger', ?)
+ON CONFLICT(name) DO UPDATE SET last_id=excluded.last_id`, lastID)
+	return err
 }

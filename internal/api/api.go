@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kbhatnagar1506/lull/internal/clinical"
 	"github.com/kbhatnagar1506/lull/internal/kicker"
+	"github.com/kbhatnagar1506/lull/internal/memory"
 	"github.com/kbhatnagar1506/lull/internal/store"
 )
 
@@ -68,6 +70,15 @@ type Server struct {
 	Kicker *kicker.Kicker
 	Web    http.FileSystem
 
+	// Memory and Recorder are the narrative half of the product. Both are safe
+	// when nil: Lull works identically without them.
+	Memory   *memory.Client
+	Recorder *memory.Recorder
+
+	// Clinical writes the provider note from the numeric series. Different job
+	// from Memory: numbers, not narrative.
+	Clinical *clinical.Summarizer
+
 	// Maternal returns the mother's live metrics. Wired to the tracker so the
 	// panel on screen is computed, not typed into the HTML.
 	Maternal func() map[string]any
@@ -95,6 +106,11 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/fool", s.handleFool)
 	mux.HandleFunc("/api/maternal", s.handleMaternal)
 	mux.HandleFunc("/report", s.handleReport)
+	mux.HandleFunc("/api/memories", s.handleMemoryList)
+	mux.HandleFunc("/api/note", s.handleNote)
+	mux.HandleFunc("/api/profile", s.handleProfile)
+	mux.HandleFunc("/api/appointment", s.handleAppointment)
+	mux.HandleFunc("/api/ask", s.handleAsk)
 	return mux
 }
 
