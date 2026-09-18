@@ -16,6 +16,7 @@ import (
 //   - maternal movement, which appears on ALL nodes including the reference
 //   - fetal kicks, which appear only on the abdominal nodes, attenuated by the
 //     foam (or in the real device, by tissue)
+//   - respiration, a slow torso oscillation on every node
 type Sim struct {
 	SampleHz int
 
@@ -28,6 +29,12 @@ type Sim struct {
 	// pending impulses, applied as a decaying envelope
 	kicks    []impulse
 	maternal []impulse
+
+	// Respiration. Real, because the maternal panel measures it and a panel
+	// measuring noise is worse than no panel.
+	breathHz  float64 // ~0.25 Hz is 15 breaths a minute
+	breathAmp float64
+	t0        time.Time
 }
 
 type impulse struct {
@@ -57,6 +64,9 @@ func NewSim(sampleHz int) *Sim {
 		readings:  make(chan Reading, 1024),
 		acoustics: make(chan Acoustic, 256),
 		stop:      make(chan struct{}),
+		breathHz:  0.25, // 15 breaths per minute
+		breathAmp: 0.035,
+		t0:        time.Now(),
 	}
 	go s.run()
 	go s.wander()
@@ -130,6 +140,11 @@ func (s *Sim) run() {
 		case now := <-tick.C:
 			kick, mat := s.envelopes(now)
 
+			// Breathing moves the whole torso, so it lands on every node and
+			// is correctly NOT counted as fetal movement by the subtraction.
+			elapsed := now.Sub(s.t0).Seconds()
+			breath := s.breathAmp * math.Sin(2*math.Pi*s.breathHz*elapsed)
+
 			for _, node := range []Node{NodeAbdoA, NodeAbdoB, NodeRef} {
 				v := mat // maternal movement reaches every node
 				if node != NodeRef {
@@ -145,9 +160,12 @@ func (s *Sim) run() {
 				r := Reading{
 					T:    now,
 					Node: node,
-					AX:   v*0.6 + noise,
-					AY:   -1.0 + noise, // gravity on Y, as if lying down
-					AZ:   v*0.8 + noise,
+					// Mounting convention (see package maternal): X across the
+					// body, Y head-ward, Z out of the back. Gravity on X means
+					// she is on her side, which is where we want her.
+					AX: -1.0 + noise,
+					AY: v*0.6 + noise,
+					AZ: v*0.8 + breath + noise,
 				}
 				select {
 				case s.readings <- r:

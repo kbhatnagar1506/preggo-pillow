@@ -29,6 +29,7 @@ import (
 	"github.com/kbhatnagar1506/lull/internal/api"
 	"github.com/kbhatnagar1506/lull/internal/detect"
 	"github.com/kbhatnagar1506/lull/internal/kicker"
+	"github.com/kbhatnagar1506/lull/internal/maternal"
 	"github.com/kbhatnagar1506/lull/internal/sensor"
 	"github.com/kbhatnagar1506/lull/internal/store"
 	"github.com/kbhatnagar1506/lull/web"
@@ -49,6 +50,9 @@ func main() {
 		acousticThreshold = flag.Float64("acoustic-threshold", 0, "acoustic spike threshold above rolling floor; 0 picks a default per source")
 		requireAcoustic   = flag.Bool("require-acoustic", true, "a detection must be confirmed by the contact mic")
 		kickThreshold     = flag.Float64("threshold", 0, "detection residual in g; 0 uses the default")
+
+		demo = flag.Bool("demo", true, "keep the seeded night fixed so the override demo is stable; "+
+			"set false to roll real detections into tonight's count")
 	)
 	flag.Parse()
 
@@ -123,6 +127,11 @@ func main() {
 	}
 	defer src.Close()
 
+	// --- maternal metrics ----------------------------------------------
+	// The override argument is "every maternal number is normal and the baby
+	// still moved 41% less". That only lands if these came from a sensor.
+	mat := maternal.NewTracker()
+
 	// --- detector ------------------------------------------------------
 	cfg := detect.DefaultConfig()
 	cfg.RequireAcoustic = *requireAcoustic
@@ -157,8 +166,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go pumpSensors(ctx, src, det, hub)
+	go pumpSensors(ctx, src, det, mat, hub)
 	go pumpDetections(ctx, det, st, hub)
+	if !*demo {
+		go rollUpNights(ctx, st)
+	} else {
+		log.Println("demo mode: tonight's seeded count stays fixed (-demo=false to roll up live detections)")
+	}
 
 	// --- http ----------------------------------------------------------
 	sub, err := fs.Sub(web.FS, "static")
@@ -172,6 +186,17 @@ func main() {
 		Kicker: kk,
 		Web:    http.FS(sub),
 		Fool:   fool,
+		Maternal: func() map[string]any {
+			st := mat.Stats()
+			return map[string]any{
+				"posture":         st.Posture,
+				"supine_minutes":  st.SupineMinutes,
+				"respiration_rpm": st.RespirationRPM,
+				"wake_events":     st.WakeEvents,
+				"snore_percent":   st.SnorePercent,
+				"ready":           st.Ready,
+			}
+		},
 	}
 
 	httpSrv := &http.Server{
@@ -226,7 +251,7 @@ func resolvePorts(spec string) ([]string, error) {
 // pumpSensors feeds every sample into the detector and streams a decimated
 // trace to the dashboard. The trace is decimated because 100 Hz times three
 // nodes is more than any browser needs to draw a legible waveform.
-func pumpSensors(ctx context.Context, src sensor.Source, det *detect.Detector, hub *api.Hub) {
+func pumpSensors(ctx context.Context, src sensor.Source, det *detect.Detector, mat *maternal.Tracker, hub *api.Hub) {
 	readings := src.Readings()
 	acoustics := src.Acoustics()
 
@@ -242,6 +267,7 @@ func pumpSensors(ctx context.Context, src sensor.Source, det *detect.Detector, h
 				return
 			}
 			det.Feed(r)
+			mat.Feed(r)
 			if r.Node == sensor.NodeRef {
 				n++
 				if n%decimate == 0 {
@@ -256,6 +282,7 @@ func pumpSensors(ctx context.Context, src sensor.Source, det *detect.Detector, h
 				continue
 			}
 			det.FeedAcoustic(a)
+			mat.FeedAcoustic(a)
 		}
 	}
 }
@@ -272,6 +299,30 @@ func pumpDetections(ctx context.Context, det *detect.Detector, st *store.Store, 
 				log.Printf("detection insert: %v", err)
 			}
 			hub.Broadcast(api.Event{Kind: "detection", Data: d})
+		}
+	}
+}
+
+// rollUpNights writes the real detection count for today into the nights table
+// so the trend reflects what actually happened. Off in demo mode, because the
+// seeded night is what makes the override visible on stage.
+func rollUpNights(ctx context.Context, st *store.Store) {
+	tick := time.NewTicker(10 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			day := time.Now().Format("2006-01-02")
+			n, err := st.CountDetectionsOn(day)
+			if err != nil {
+				log.Printf("rollup: %v", err)
+				continue
+			}
+			if err := st.UpsertNight(day, n, false); err != nil {
+				log.Printf("rollup upsert: %v", err)
+			}
 		}
 	}
 }

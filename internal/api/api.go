@@ -68,6 +68,10 @@ type Server struct {
 	Kicker *kicker.Kicker
 	Web    http.FileSystem
 
+	// Maternal returns the mother's live metrics. Wired to the tracker so the
+	// panel on screen is computed, not typed into the HTML.
+	Maternal func() map[string]any
+
 	// Fool injects simulated maternal movement. It lands on every node at
 	// once, so a correct detector must reject it. This is the "now watch me
 	// try to fool it" beat in the demo.
@@ -89,6 +93,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/blind/score", s.handleBlindScore)
 	mux.HandleFunc("/api/nights", s.handleNights)
 	mux.HandleFunc("/api/fool", s.handleFool)
+	mux.HandleFunc("/api/maternal", s.handleMaternal)
+	mux.HandleFunc("/report", s.handleReport)
 	return mux
 }
 
@@ -209,6 +215,20 @@ func (s *Server) handleFool(w http.ResponseWriter, r *http.Request) {
 		s.Fool()
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) maternalStats() map[string]any {
+	if s.Maternal == nil {
+		return map[string]any{
+			"posture": "unknown", "supine_minutes": 0.0, "respiration_rpm": 0.0,
+			"wake_events": 0, "snore_percent": 0.0, "ready": false,
+		}
+	}
+	return s.Maternal()
+}
+
+func (s *Server) handleMaternal(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.maternalStats())
 }
 
 func (s *Server) handleNights(w http.ResponseWriter, r *http.Request) {

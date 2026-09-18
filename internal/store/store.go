@@ -264,3 +264,19 @@ func (s *Store) Baseline(excludeLast int) (float64, error) {
 	}
 	return float64(vals[mid-1]+vals[mid]) / 2, nil
 }
+
+// CountDetectionsOn returns how many detections landed on a calendar day,
+// local time. Used by the nightly rollup so the trend reflects real sensor
+// output rather than seeded data.
+func (s *Store) CountDetectionsOn(day string) (int, error) {
+	t, err := time.ParseInLocation("2006-01-02", day, time.Local)
+	if err != nil {
+		return 0, err
+	}
+	from := ms(t)
+	to := ms(t.AddDate(0, 0, 1))
+	var n int
+	err = s.db.QueryRow(
+		`SELECT COUNT(*) FROM detections WHERE t_ms >= ? AND t_ms < ?`, from, to).Scan(&n)
+	return n, err
+}

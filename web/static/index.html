@@ -116,15 +116,15 @@
     <div class="panel">
       <h2>Maternal &mdash; tonight</h2>
       <div class="vitals">
-        <div class="vital"><div class="k">Sleep fragmentation</div><div class="v">7 wakes</div><div class="s">normal</div></div>
-        <div class="vital"><div class="k">Respiration</div><div class="v">14 /min</div><div class="s">normal</div></div>
-        <div class="vital"><div class="k">Snore burden</div><div class="v">2%</div><div class="s">normal</div></div>
-        <div class="vital"><div class="k">Supine minutes</div><div class="v">0 min</div><div class="s">normal</div></div>
+        <div class="vital" id="v-wake"><div class="k">Sleep fragmentation</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
+        <div class="vital" id="v-resp"><div class="k">Respiration</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
+        <div class="vital" id="v-snore"><div class="k">Snore burden</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
+        <div class="vital" id="v-supine"><div class="k">Posture</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
       </div>
       <div class="footnote">
-        Every maternal metric is normal. Placental insufficiency produces no maternal
-        symptoms, which is exactly why averaging these with the fetal count would
-        report a good night.
+        Computed live from the reference sensor on her back. Every maternal metric
+        is normal &mdash; placental insufficiency produces no maternal symptoms, which
+        is exactly why averaging these with the fetal count would report a good night.
       </div>
     </div>
   </div>
@@ -147,11 +147,19 @@
       <button class="btn felt" onclick="press()">I FELT A KICK</button>
       <p class="hint" style="text-align:center">Space bar works too.</p>
       <div id="scoreBox"></div>
+      <canvas id="overlay" height="74" style="margin-top:12px;display:none"></canvas>
+      <div id="legend" class="hint" style="display:none">
+        <span style="color:#8b949e">&#9474;</span> kick delivered &nbsp;
+        <span style="color:#3fb950">&#9474;</span> Lull caught &nbsp;
+        <span style="color:#d29922">&#9474;</span> you pressed
+      </div>
     </div>
 
     <div class="panel">
       <h2>Try to fool it</h2>
       <button class="btn" onclick="fool()">Simulate maternal movement</button>
+      <button class="btn" onclick="window.open('/report','_blank')">Open the clinician report</button>
+      <button class="btn" id="audioBtn" onclick="toggleAudio()">Sound: OFF</button>
       <p class="hint">
         Lands on every node at once. The count must not move. That is the
         reference sensor doing its job.
@@ -179,13 +187,34 @@ es.onmessage = ev => {
     $('count').textContent = count;
     marks.push(trace.length);
     if (marks.length > 40) marks.shift();
-    flash();
+    flash(); thud();
   } else if (m.kind === 'status') {
     blind = !!m.data.blind;
     $('blindBtn').textContent = blind ? 'Stop blind test' : 'Start blind test';
     $('blindBtn').className = blind ? 'btn stop' : 'btn';
   }
 };
+
+/* ---------- audio ----------
+   The room hearing the kick is a real demo moment. Turn it OFF during the
+   blind test or you are handing the judge the answers. */
+let audioOn = false, actx = null;
+function toggleAudio(){
+  audioOn = !audioOn;
+  $('audioBtn').textContent = 'Sound: ' + (audioOn ? 'ON' : 'OFF');
+  if (audioOn && !actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function thud(){
+  if (!audioOn || !actx) return;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(92, actx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(48, actx.currentTime + 0.14);
+  g.gain.setValueAtTime(0.0001, actx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.35, actx.currentTime + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.22);
+  o.connect(g); g.connect(actx.destination);
+  o.start(); o.stop(actx.currentTime + 0.25);
+}
 
 function flash(){
   const el = $('count');
@@ -223,6 +252,50 @@ async function score(){
       You were awake, in a quiet room, for ${Math.round((d.to-d.from)/1000)} seconds.
       She does this asleep, for twelve weeks.
     </p>`;
+  drawOverlay(d);
+}
+
+/* The reveal: every kick delivered, what Lull caught, what the judge pressed,
+   on one timeline. This is the moment, so it is a picture and not a table. */
+function drawOverlay(d){
+  const c = $('overlay'); c.style.display = 'block'; $('legend').style.display = 'block';
+  const [x,w,h] = fit(c);
+  x.clearRect(0,0,w,h);
+
+  const span = Math.max(1, d.to - d.from);
+  const rows = {command:{y:14,col:'#8b949e'}, detection:{y:38,col:'#3fb950'}, press:{y:62,col:'#d29922'}};
+
+  x.font = '9px ui-monospace,monospace';
+  Object.entries(rows).forEach(([k,r]) => {
+    x.strokeStyle = '#21262d'; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(0,r.y); x.lineTo(w,r.y); x.stroke();
+  });
+
+  (d.events||[]).forEach(e => {
+    const r = rows[e.kind]; if (!r) return;
+    const px = ((e.t_ms - d.from)/span)*(w-8) + 4;
+    x.strokeStyle = r.col; x.lineWidth = 2;
+    x.beginPath(); x.moveTo(px, r.y-9); x.lineTo(px, r.y+9); x.stroke();
+  });
+}
+
+/* ---------- maternal panel, computed not hardcoded ---------- */
+async function refreshMaternal(){
+  const d = await (await fetch('/api/maternal')).json();
+  const set = (id, val, status) => {
+    const el = $(id);
+    el.querySelector('.v').textContent = val;
+    el.querySelector('.s').textContent = status;
+  };
+  if (!d.ready){
+    ['v-wake','v-resp','v-snore','v-supine'].forEach(id => set(id, '\u2014', 'warming up'));
+    return;
+  }
+  set('v-wake',   d.wake_events + ' wakes',                'normal');
+  set('v-resp',   Math.round(d.respiration_rpm) + ' /min', 'normal');
+  set('v-snore',  d.snore_percent.toFixed(1) + '%',        'normal');
+  set('v-supine', d.posture,
+      d.posture === 'supine' ? Math.round(d.supine_minutes) + ' min on her back' : 'off her back');
 }
 
 /* ---------- nightly trend + verdict ---------- */
@@ -314,7 +387,9 @@ function drawTrend(nights, baseline){
 /* ---------- boot ---------- */
 drawTrace();
 refreshNights();
+refreshMaternal();
 setInterval(refreshNights, 5000);
+setInterval(refreshMaternal, 2000);
 addEventListener('resize', () => refreshNights());
 </script>
 </body>
