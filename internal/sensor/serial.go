@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 	"sync"
@@ -11,6 +12,10 @@ import (
 
 	"go.bug.st/serial"
 )
+
+// serialPort is the slice of go.bug.st/serial we use, named so tests can build
+// a Serial without opening a real device.
+type serialPort = serial.Port
 
 // Serial reads accelerometer nodes from one or more Arduinos over USB.
 //
@@ -177,7 +182,15 @@ func (s *Serial) runPort(dev string, baud int) {
 
 // pump reads lines until the port errors or the source is closed.
 func (s *Serial) pump(dev string, port serial.Port) {
-	sc := bufio.NewScanner(port)
+	s.pumpReader(dev, port)
+}
+
+// pumpReader is pump with the port widened to an io.Reader, so the line
+// protocol can be tested without hardware. The parsing here is where a bad
+// frame from a half-reset Arduino would corrupt a night's data, so it is worth
+// being able to exercise directly.
+func (s *Serial) pumpReader(dev string, r io.Reader) {
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 4096), 64*1024)
 
 	var node Node
