@@ -53,6 +53,11 @@ Two implementation details that were not obvious and cost real debugging time:
 go run ./cmd/lull -source sim
 ```
 
+The web app that shares this design system and auth model lives at
+[aaditisinghal/Preggo-Pillow](https://github.com/aaditisinghal/Preggo-Pillow).
+This repository is the device: the Go binary that runs on the Pi, reads the
+sensors, counts movement, and serves the pages above.
+
 Then open:
 
 | URL | What it is |
