@@ -196,3 +196,52 @@ func TestStandaloneSiteCopy(t *testing.T) {
 		t.Error("the standalone copy has drifted from the embedded landing page")
 	}
 }
+
+// The nav must match the real app's, or the shell is a different product from
+// the one the team built.
+func TestDashboardHasTheRealNav(t *testing.T) {
+	b, err := os.ReadFile("../../web/static/dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+	for _, want := range []string{
+		`href="/dashboard"`, `href="/history"`, `href="/healthcare"`,
+		`href="/medications"`, `href="/settings"`,
+		"Live from the pillow", `id="live-badge"`, `href="/auth/logout"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("dashboard is missing %q", want)
+		}
+	}
+}
+
+// Lull has no fetal heart-rate sensor and no accelerometer or camera can read
+// one through the abdominal wall. The tile must say so rather than show a
+// number, because a fabricated vital sign on a pregnancy monitor is the worst
+// possible thing to ship.
+func TestDashboardDoesNotClaimFetalHeartRate(t *testing.T) {
+	b, err := os.ReadFile("../../web/static/dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+	i := strings.Index(page, `id="v-fhr"`)
+	if i < 0 {
+		t.Fatal("the baby heart rate tile is gone")
+	}
+	tile := page[i:min(i+700, len(page))]
+	if !strings.Contains(tile, "Not measured by this device") {
+		t.Error("the fetal heart rate tile does not disclaim that it has no sensor")
+	}
+	if !strings.Contains(tile, "no sensor") {
+		t.Error("the tile has no badge marking it unavailable")
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

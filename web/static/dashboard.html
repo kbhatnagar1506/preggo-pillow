@@ -124,18 +124,35 @@ canvas{width:100%;border-radius:var(--radius-sm);background:var(--pink-50);borde
   border-radius:999px;padding:2px 9px;text-transform:uppercase;letter-spacing:.05em}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--ink-3);margin-top:9px}
 </style>
+<style>
+/* LiveMonitor, matching the real component */
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.head h2{margin:0}
+.badge{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:5px 12px;
+  font-size:.74rem;font-weight:800;background:var(--pink-100);color:var(--pink-700);white-space:nowrap}
+.badge-quiet{background:var(--pink-50);color:var(--ink-3)}
+.badge-red{background:var(--red-100);color:var(--red-700)}
+.dot-live{width:8px;height:8px;border-radius:50%;background:#087443}
+.vital.stale{opacity:.45}
+.vital .label{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.vitalWide{grid-column:1/-1}
+.charts{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));margin-top:16px}
+.chartHead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
+.chartHead h3{font-size:.92rem;font-weight:800;margin:0}
+.axis{display:flex;justify-content:space-between;font-size:.72rem;color:var(--ink-3);margin-top:4px}
+.pattern{margin-top:16px;font-weight:700;color:var(--ink)}
+.monitor-foot{margin-top:8px;font-size:.82rem;line-height:1.5;color:var(--ink-3)}
+.nav svg{flex:none;opacity:.85}
+.empty{padding:22px;text-align:center;border:1px dashed var(--line);border-radius:var(--radius-sm)}
+</style>
+
 </head>
 <body>
 
 <div class="shell">
   <header class="topbar">
-    <button class="icon-btn" id="menu-open" aria-label="Open menu" aria-expanded="false" aria-controls="side-nav">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    </button>
-    <span class="brand">
-      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg>
-      Preggo Pillow
-    </span>
+    <button class="icon-btn" id="menu-open" aria-label="Open menu" aria-expanded="false" aria-controls="side-nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <span class="brand"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg> Preggo Pillow</span>
     <span style="width:44px" aria-hidden="true"></span>
   </header>
 
@@ -143,29 +160,25 @@ canvas{width:100%;border-radius:var(--radius-sm);background:var(--pink-50);borde
 
   <aside class="sidebar" id="side-nav" aria-label="Main">
     <div class="sidebar-head">
-      <span class="brand">
-        <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg>
-        Preggo Pillow
-      </span>
-      <button class="icon-btn" id="menu-close" aria-label="Close menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
+      <span class="brand"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg> Preggo Pillow</span>
+      <button class="icon-btn" id="menu-close" aria-label="Close menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <nav class="nav">
-      <a href="/dashboard" class="active">Dashboard</a>
-      <a href="/report">Report</a>
-      <a href="/krishnabhatnagar">Phone remote</a>
-      <a href="/">Home</a>
+        <a href="/dashboard" class="active"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg> Dashboard</a>
+        <a href="/history"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg> History</a>
+        <a href="/healthcare"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Healthcare</a>
+        <a href="/medications"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"/><path d="M8.5 8.5l7 7"/></svg> Medications</a>
+        <a href="/settings"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Settings</a>
     </nav>
     <div class="sidebar-foot">
       <div class="user">
-        <span class="avatar">K</span>
+        <span class="avatar" id="avatar">D</span>
         <span>
-          <span class="user-name">Krishna</span><br>
-          <span class="user-meta">sandbox &middot; fictional data</span>
+          <span class="user-name" id="user-name">Loading&hellip;</span><br>
+          <span class="user-meta" id="user-meta">&nbsp;</span>
         </span>
       </div>
-      <a class="btn warn" href="/report">Record for appointment</a>
+      <a class="btn warn" href="/auth/logout"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg> Sign out</a>
     </div>
   </aside>
 
@@ -173,89 +186,106 @@ canvas{width:100%;border-radius:var(--radius-sm);background:var(--pink-50);borde
 
     <header>
       <p class="eyebrow" id="today"></p>
-      <h1>Tonight</h1>
-      <p class="muted">Your baby&rsquo;s movement, compared with your baby&rsquo;s own pattern &mdash;
-         never with a population average.</p>
+      <h1 id="greeting">Hello</h1>
+      <p class="muted" id="ga">
+        Here&rsquo;s your baby&rsquo;s movement tonight, compared with your baby&rsquo;s own pattern.
+      </p>
     </header>
 
-    <!-- FETAL COUNT -->
-    <section class="card">
-      <div class="card-title">
-        <h2>Fetal movement &mdash; tonight</h2>
-        <span class="chip"><span class="dot" id="conn"></span><span id="conn-label">connecting</span></span>
-      </div>
-      <div class="hero-count" id="count">
-        <b id="fetal">0</b>
-        <span class="of">movements &middot; baseline <span id="baseline">&mdash;</span>/night
-          &middot; <span id="deviation">&mdash;</span></span>
-      </div>
-      <div class="verdict" id="verdict">Warming up&hellip;</div>
-      <div class="footnote">
-        The count comes from <strong>detections only</strong>. It never reads the command table,
-        so pressing buttons cannot inflate it.
-      </div>
-    </section>
+    <p class="notice" id="demo-notice" role="status" hidden>
+      <strong>Demo account.</strong> Fictional data. Nothing here is medical advice.
+    </p>
 
-    <!-- LIVE TRACE -->
-    <section class="card">
-      <div class="card-title"><h2>Live signal &mdash; reference-subtracted residual</h2></div>
-      <canvas id="trace" height="150"></canvas>
-      <div class="legend" id="legend"></div>
-      <div class="footnote">
-        Maternal movement lands on all three nodes and cancels. Only what happens
-        at the abdomen alone survives the subtraction.
-      </div>
-    </section>
-
-    <div class="grid grid-2" style="--gap:20px;align-items:start">
-
-      <!-- TREND -->
-      <section class="card">
-        <div class="card-title">
-          <h2>Nightly trend</h2>
-          <span class="simtag" id="simtag" hidden>simulated</span>
+    <!-- LIVE FROM THE PILLOW -->
+    <section class="stack" aria-label="Live pillow tracking">
+      <div class="card">
+        <div class="head">
+          <div>
+            <h2>Live from the pillow</h2>
+            <p class="faint" id="device-label">Preggo Pillow &middot; simulated</p>
+          </div>
+          <span class="badge badge-quiet" id="live-badge" aria-live="polite">Connecting&hellip;</span>
         </div>
-        <canvas id="trend" height="150"></canvas>
-        <div class="footnote">Fourteen nights against this baby&rsquo;s own median.</div>
-      </section>
 
-      <!-- MATERNAL -->
-      <section class="card">
-        <div class="card-title"><h2>Maternal &mdash; tonight</h2></div>
         <div class="vitals">
-          <div class="vital" id="v-wake"><div class="k">Sleep fragmentation</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
-          <div class="vital" id="v-resp"><div class="k">Respiration</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
-          <div class="vital" id="v-snore"><div class="k">Snore burden</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
-          <div class="vital" id="v-supine"><div class="k">Posture</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
-          <div class="vital" id="v-pulse"><div class="k">Pulse</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
-          <div class="vital" id="v-breath"><div class="k">Breathing rate</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
+          <div class="vital" id="v-fetal">
+            <div class="label"><span class="k">Movement tonight</span></div>
+            <div class="v" id="fetal">0</div>
+            <div class="s" id="fetal-note">baseline <span id="baseline">&mdash;</span> &middot; <span id="deviation">&mdash;</span></div>
+          </div>
+          <div class="vital" id="v-lastmin">
+            <div class="label"><span class="k">Movement</span></div>
+            <div class="v" id="count">0</div>
+            <div class="s">in the last minute</div>
+          </div>
+          <div class="vital" id="v-pulse">
+            <div class="k">Mom heart rate</div><div class="v">&mdash;</div><div class="s">&nbsp;</div>
+          </div>
+          <div class="vital" id="v-breath">
+            <div class="k">Mom breathing</div><div class="v">&mdash;</div><div class="s">&nbsp;</div>
+          </div>
+          <div class="vital" id="v-resp">
+            <div class="k">Respiration</div><div class="v">&mdash;</div><div class="s">&nbsp;</div>
+          </div>
+          <div class="vital" id="v-supine">
+            <div class="k">Posture</div><div class="v">&mdash;</div><div class="s">&nbsp;</div>
+          </div>
+          <div class="vital" id="v-wake">
+            <div class="k">Sleep fragmentation</div><div class="v">&mdash;</div><div class="s">&nbsp;</div>
+          </div>
+          <div class="vital" id="v-snore">
+            <div class="k">Snore burden</div><div class="v">&mdash;</div><div class="s">&nbsp;</div>
+          </div>
+          <div class="vital vitalWide" id="v-fhr">
+            <div class="label"><span class="k">Baby heart rate</span><span class="badge badge-quiet">no sensor</span></div>
+            <div class="v">&mdash;</div>
+            <div class="s">Not measured by this device. Fetal heart rate needs Doppler ultrasound &mdash;
+              no accelerometer or camera can read it through the abdominal wall.</div>
+          </div>
         </div>
-        <div class="footnote" id="vitals-src" hidden></div>
-        <div class="footnote">
-          Every maternal metric is normal &mdash; placental insufficiency produces no maternal
-          symptoms, which is exactly why averaging these with the fetal count would report
-          a good night.
+
+        <div class="charts">
+          <div class="chart">
+            <div class="chartHead"><h3>Movement</h3><span class="faint">live signal</span></div>
+            <canvas id="trace" height="150"></canvas>
+            <div class="axis"><span>3 min ago</span><span>now</span></div>
+            <div class="legend" id="legend"></div>
+          </div>
+          <div class="chart">
+            <div class="chartHead">
+              <h3>Nightly trend</h3>
+              <span class="faint">14 nights <span class="simtag" id="simtag" hidden>simulated</span></span>
+            </div>
+            <canvas id="trend" height="150"></canvas>
+            <div class="axis"><span>14 nights ago</span><span>last night</span></div>
+          </div>
         </div>
-      </section>
-    </div>
+
+        <p class="pattern" id="verdict">Warming up&hellip;</p>
+        <p class="monitor-foot">
+          Preggo Pillow shows changes from your baby&rsquo;s own pattern. It can&rsquo;t tell you your
+          baby is fine. If you&rsquo;re worried, call your provider. Emergency: 911.
+        </p>
+      </div>
+    </section>
+
+    <!-- DEMO CONTROLS -->
+    <section class="card">
+      <div class="card-title"><h2>Demo controls</h2></div>
+      <div class="row">
+        <button class="btn sm" onclick="kick('weak')">Weak kick</button>
+        <button class="btn sm" onclick="kick('medium')">Medium</button>
+        <button class="btn sm" onclick="kick('strong')">Strong</button>
+        <button class="btn sm quiet" onclick="toggleAudio()" id="audioBtn">Sound on</button>
+      </div>
+      <div class="footnote">
+        Fires the phantom. Written to <code>commands</code> &mdash; the count never reads that table.
+      </div>
+    </section>
 
     <div class="grid grid-2" style="--gap:20px;align-items:start">
-
-      <!-- DEMO CONTROL -->
       <section class="card">
-        <div class="card-title"><h2>Demo control</h2></div>
-        <div class="row">
-          <button class="btn sm" onclick="kick('weak')">Weak kick</button>
-          <button class="btn sm" onclick="kick('medium')">Medium</button>
-          <button class="btn sm" onclick="kick('strong')">Strong</button>
-          <button class="btn sm quiet" onclick="toggleAudio()" id="audioBtn">Sound on</button>
-        </div>
-        <div class="footnote">Fires the phantom. Written to <code>commands</code>, never to the count.</div>
-      </section>
-
-      <!-- BLIND TEST -->
-      <section class="card">
-        <div class="card-title"><h2>Blind test &mdash; judge input</h2></div>
+        <div class="card-title"><h2>Blind test</h2></div>
         <div class="row">
           <button class="btn sm" onclick="press()">I felt that</button>
           <button class="btn sm quiet" onclick="toggleBlind()" id="blindBtn">Start blind run</button>
@@ -264,22 +294,23 @@ canvas{width:100%;border-radius:var(--radius-sm);background:var(--pink-50);borde
         <div id="scoreBox" class="footnote"></div>
         <div id="overlay" class="footnote"></div>
       </section>
+
+      <section class="card">
+        <div class="card-title"><h2>Try to fool it</h2></div>
+        <div class="row">
+          <button class="btn sm warn" onclick="fool()">Simulate maternal movement</button>
+        </div>
+        <div class="footnote">
+          Lands on every node at once, exactly like rolling over. The count should not move.
+        </div>
+      </section>
     </div>
 
-    <!-- FOOL IT -->
-    <section class="card">
-      <div class="card-title"><h2>Try to fool it</h2></div>
-      <div class="row">
-        <button class="btn sm warn" onclick="fool()">Simulate maternal movement</button>
-      </div>
-      <div class="footnote">
-        Lands on every node at once, exactly like rolling over. The count should not move.
-      </div>
-    </section>
+    <div class="footnote" id="vitals-src" hidden></div>
 
-    <p class="notice">
-      Preggo Pillow is a wellness monitor, not a medical device. It cannot tell you your baby
-      is well. If movements reduce, contact your maternity unit.
+    <p class="faint">
+      Preggo Pillow is a wellness monitor, not a medical device, and cannot diagnose or rule out
+      any condition. If your baby&rsquo;s movements change, contact your maternity unit the same day.
     </p>
 
   </div></main>
@@ -295,12 +326,15 @@ const es = new EventSource('/api/stream');
 // The dot carries the colour and the label carries the word. Writing the
 // status into the dot leaves the label reading "connecting" forever and stuffs
 // text into an 8px circle.
+// The real component shows ONE badge that switches between Live, Connecting
+// and No signal, rather than a separate dot and label.
 const setConn = (word, live) => {
-  const label = $('conn-label'); if (label) label.textContent = word;
-  const dot = $('conn'); if (dot) dot.classList.toggle('live', !!live);
+  const b = $('live-badge'); if (!b) return;
+  b.className = 'badge' + (live ? '' : ' badge-quiet');
+  b.innerHTML = live ? '<span class="dot-live"></span> Live' : word;
 };
-es.onopen  = () => setConn('live', true);
-es.onerror = () => setConn('reconnecting', false);
+es.onopen  = () => setConn('Live', true);
+es.onerror = () => setConn('No signal', false);
 es.onmessage = ev => {
   const m = JSON.parse(ev.data);
   if (m.kind === 'trace') {
@@ -554,21 +588,34 @@ setInterval(refreshMaternal, 2000);
 setInterval(refreshVitals, 3000);
 addEventListener('resize', () => refreshNights());
 </script>
+
 <script>
-  // Drawer
-  (function(){
-    var sb = document.getElementById('side-nav'), bd = document.getElementById('backdrop');
-    var open = function(v){
-      sb.classList.toggle('open', v); bd.classList.toggle('open', v);
-      document.getElementById('menu-open').setAttribute('aria-expanded', String(v));
-    };
-    document.getElementById('menu-open').onclick = function(){ open(true); };
-    document.getElementById('menu-close').onclick = function(){ open(false); };
-    bd.onclick = function(){ open(false); };
-    addEventListener('keydown', function(e){ if (e.key === 'Escape') open(false); });
-    document.getElementById('today').textContent =
-      new Intl.DateTimeFormat('en-GB',{weekday:'long',month:'long',day:'numeric'}).format(new Date());
-  })();
+(function(){
+  var sb = document.getElementById('side-nav'), bd = document.getElementById('backdrop');
+  var open = function(v){
+    sb.classList.toggle('open', v); bd.classList.toggle('open', v);
+    document.getElementById('menu-open').setAttribute('aria-expanded', String(v));
+  };
+  document.getElementById('menu-open').onclick = function(){ open(true); };
+  document.getElementById('menu-close').onclick = function(){ open(false); };
+  bd.onclick = function(){ open(false); };
+  addEventListener('keydown', function(e){ if (e.key === 'Escape') open(false); });
+
+  document.getElementById('today').textContent =
+    new Intl.DateTimeFormat('en-GB',{weekday:'long',month:'long',day:'numeric'}).format(new Date());
+
+  // Who is signed in. The header greets them by first name, and a demo
+  // account says so plainly rather than letting fictional data pass as real.
+  fetch('/api/me').then(function(r){ return r.json(); }).then(function(me){
+    if (!me || !me.authenticated) return;
+    var first = (me.name || 'there').split(' ')[0];
+    document.getElementById('greeting').textContent = 'Hello, ' + first;
+    document.getElementById('user-name').textContent = me.name || 'Member';
+    document.getElementById('user-meta').textContent = me.is_demo ? 'demo \u00b7 fictional data' : (me.email || '');
+    document.getElementById('avatar').textContent = (first[0] || 'M').toUpperCase();
+    if (me.is_demo) document.getElementById('demo-notice').hidden = false;
+  }).catch(function(){});
+})();
 </script>
 </body>
 </html>
