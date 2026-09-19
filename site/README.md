@@ -23,6 +23,24 @@ npx vercel deploy --prod
 Vercel serves the directory as-is; `vercel.json` only sets clean URLs and
 security headers.
 
+## Deploying to Vercel
+
+Point Vercel at **this directory**, not the repository root. The root is a Go
+module; Vercel cannot run a long-lived Go server with an SSE stream, so there is
+nothing for it to build there.
+
+| Setting | Value |
+|---|---|
+| Root Directory | `site` |
+| Framework Preset | Other |
+| Build Command | *(none)* |
+| Output Directory | *(leave empty)* |
+| Install Command | *(none)* |
+
+```bash
+cd site && npx vercel deploy --prod
+```
+
 ## Where the app lives
 
 `index.html` here is **byte-identical** to `web/static/index.html`, the copy the

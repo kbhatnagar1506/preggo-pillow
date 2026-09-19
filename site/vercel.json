@@ -37,32 +37,32 @@
   "redirects": [
     {
       "source": "/dashboard",
-      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/dashboard",
+      "destination": "http://35.232.223.194/dashboard",
       "permanent": false
     },
     {
       "source": "/history",
-      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/history",
+      "destination": "http://35.232.223.194/history",
       "permanent": false
     },
     {
       "source": "/healthcare",
-      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/healthcare",
+      "destination": "http://35.232.223.194/healthcare",
       "permanent": false
     },
     {
       "source": "/medications",
-      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/medications",
+      "destination": "http://35.232.223.194/medications",
       "permanent": false
     },
     {
       "source": "/settings",
-      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/settings",
+      "destination": "http://35.232.223.194/settings",
       "permanent": false
     },
     {
       "source": "/report",
-      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/report",
+      "destination": "http://35.232.223.194/report",
       "permanent": false
     }
   ]
