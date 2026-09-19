@@ -18,6 +18,27 @@ This measures it instead.
 
 ---
 
+**[The one idea that makes it work](#the-one-idea-that-makes-it-work)** ·
+[Two repositories](#two-repositories) ·
+[Quick start](#quick-start) ·
+[The app](#the-app) ·
+[What it refuses to do](#what-it-refuses-to-do) ·
+[Running the demo](#running-the-demo) ·
+[Sensor sources](#sensor-sources) ·
+[Repository map](#repository-map) ·
+[The tables](#the-tables-and-why-they-are-separate) ·
+[Sign-in](#sign-in-and-who-can-read-the-record) ·
+[The escalation call](#the-escalation-call) ·
+[Maternal vitals](#maternal-vitals) ·
+[The clinical note](#the-clinical-note) ·
+[Hardware](#hardware) ·
+[Tests](#tests) ·
+[Configuration](#configuration) ·
+[Building for the Pi](#building-for-the-pi) ·
+[Status](#status)
+
+---
+
 ## The one idea that makes it work
 
 A single accelerometer on the abdomen cannot tell a kick from the mother rolling
@@ -47,39 +68,109 @@ Two implementation details that were not obvious and cost real debugging time:
 
 ---
 
+## Two repositories
+
+This one is **the device**: the Go binary that runs on the Pi, reads the sensors,
+counts movement, and serves the pages below. It is a single cross-compiled file
+with no runtime dependencies.
+
+The **web app** — the same design system, the same Auth0 tenant, document upload
+and the assistant — lives at
+[aaditisinghal/Preggo-Pillow](https://github.com/aaditisinghal/Preggo-Pillow).
+
+Where they overlap, this repository defers. The pages here follow that app's
+components so a person moving between them does not notice a seam.
+
+---
+
 ## Quick start
 
 ```bash
 go run ./cmd/lull -source sim
 ```
 
-The web app that shares this design system and auth model lives at
-[aaditisinghal/Preggo-Pillow](https://github.com/aaditisinghal/Preggo-Pillow).
-This repository is the device: the Go binary that runs on the Pi, reads the
-sensors, counts movement, and serves the pages above.
-
-Then open:
-
 | URL | What it is |
 |---|---|
-| `http://localhost:8080/` | the landing page |
-| `http://localhost:8080/dashboard` | the live operator dashboard |
-| `http://localhost:8080/history` | the last 14 nights, against this baby's baseline |
-| `http://localhost:8080/healthcare` | the record you take to the appointment |
-| `http://localhost:8080/medications` | reminders, stored on the device |
-| `http://localhost:8080/settings` | what this pillow is actually wired to |
-| `http://localhost:8080/report` | the clinician's record |
-| `http://localhost:8080/krishnabhatnagar` | the phone remote |
+| `/` | the landing page |
+| `/dashboard` | the live monitor: tonight's count against the baseline |
+| `/history` | the last 14 nights, night by night |
+| `/healthcare` | the record you take to the appointment |
+| `/medications` | reminders, stored on the device |
+| `/settings` | what this pillow is actually wired to |
+| `/report` | the printable clinician's record |
+| `/krishnabhatnagar` | the phone remote |
 
-The five app pages share one shell: `web/static/app.css` and `web/static/app.js`
-hold the navigation, and each page's HTML carries an identical `<nav>` block
-whose active link is decided from the URL. `TestEveryLinkInTheSidebarResolves`
-reads the hrefs out of the shipped HTML and asks the router for each one, so a
-menu item can never point at a route that does not exist.
+Default port is `8080`. Run with `-addr :3000` if your Auth0 callback points
+there — the server compares `APP_BASE_URL` against the port it is listening on
+and warns at startup when the two disagree, because an hour disappears into that
+mismatch otherwise.
 
-Nothing external is required — `-source sim` runs the whole product against a
-simulated pregnancy. Sponsors (Backboard, TigerData, Gemini, Vapi) activate only
-if their keys are present in `.env`, and the app runs fine without any of them.
+Nothing external is required. `-source sim` runs the entire product against a
+simulated pregnancy, with no hardware, no database server and no keys. Every
+integration (Auth0, Backboard, TigerData, Gemini, Vapi, Presage) activates only
+if its key is present, logs its absence at startup, and is never load-bearing.
+
+---
+
+## The app
+
+Five pages behind one shell. `web/static/app.css` and `web/static/app.js` carry
+the navigation; each page ships an identical `<nav>` block and the active link is
+decided from `location.pathname`, so a copied sidebar cannot highlight the wrong
+page.
+
+**Dashboard** — tonight's movement count, the baseline, the deviation, and the
+verdict. Two charts, the vitals grid, and a footer that says plainly it cannot
+tell you your baby is fine.
+
+**History** — fourteen nights as bars, then one card per night. A night is
+flagged only when the night before it was also low, which is the same rule the
+alert uses: fetal sleep cycles run 20–40 minutes and babies have genuinely quiet
+nights, so a single-night alarm is noise.
+
+**Healthcare** — the report you take to the appointment, the running record of
+what has been written about this pregnancy, and a form to record what a provider
+told you. Without that last one the next appointment starts from nothing.
+
+**Medications** — what you take and when, in the same SQLite file as the
+detections. A reminder living in one phone's `localStorage` is not a reminder; it
+is a note that vanishes when she opens the page on the laptop.
+
+**Settings** — read from the running process, never typed into the HTML: the
+sensor source, which capabilities exist, session policy, and every service this
+build sends data to. A settings page that claims a capability the binary does not
+have is worse than none, because it is the first thing anyone tests.
+
+`TestEveryLinkInTheSidebarResolves` reads the hrefs out of the shipped HTML and
+asks the router for each one. A menu item cannot point at a route that does not
+exist.
+
+---
+
+## What it refuses to do
+
+Each of these is pinned by a test, because the pressure to add them is real and
+arrives late at night.
+
+**No fetal heart rate.** The tile exists on the dashboard, badged `no sensor`,
+showing an em dash and the reason. Fetal heart rate needs Doppler ultrasound. No
+accelerometer and no camera reads it through the abdominal wall, and a plausible
+number in that box would be a fabricated vital sign on a pregnancy monitor.
+
+**No reassurance.** The system is never permitted to say the baby is fine. False
+reassurance is the documented failure mode of home fetal monitoring: it delays
+women from seeking care. It may only say *this is different, be seen today*.
+
+**No diagnosis.** Assessment of reduced fetal movement is a CTG and a scan, and
+belongs to a clinician.
+
+**No health details in the escalation call.** The call says a movement pattern
+changed and asks someone to check on her. It never names a medication, a
+diagnosis or a result — a phone call can be overheard, and whoever answers may
+not be who she would have chosen to tell.
+
+**Deleting a medication keeps the doses already recorded.** Removing the plan must
+never quietly improve the adherence history.
 
 ---
 
@@ -153,26 +244,43 @@ internal/
   detect            reference subtraction and the detector
   sensor            every input source + trace record/replay
   maternal          posture, respiration, wake events
+  vitals            contactless maternal pulse and breathing
   kicker            the phantom: Grove I2C motor driver, sysfs servo
   knob              rotary dial → "she felt it"
-  store             SQLite; commands / detections / presses kept separate
+  store             SQLite; what was commanded, detected and felt kept apart
   tiger             TigerData hypertables and the nightly baseline
   memory            Backboard narrative memory
   clinical          the Gemini note, implementing RCOG GTG-57
-  voice             the escalation phone call (Vapi + 11Labs)
-  api               HTTP, SSE, the report, the phone remote
+  voice             the escalation phone call (Vapi + ElevenLabs)
+  auth              Auth0 OIDC + our own sessions, cookies, crypto
+  brand             the one name the product is called in front of a person
+  api               HTTP, SSE, the pages, the report, the phone remote
 web/static          landing page + the five app pages, embedded in the binary
 site/               the same landing page, standalone, for Vercel
+tools/presage-bridge  runs the Presage SDK and POSTs /api/vitals
+arduino/            the original serial sensor sketch
+docs/HARDWARE.md    the full hardware log
 ```
+
+`internal/brand` holds one constant, and it exists because of a real bug. The
+codebase is called `lull`; the product is **Preggo Pillow**. The two drifted, and
+they drifted in exactly the three places a stranger meets first: the record a
+midwife reads, the page on the phone, and the voice on the emergency call, which
+introduced itself as "an automated alert from Lull". The landing page said
+Preggo Pillow, so anyone comparing the two saw two products. A test now fails if
+any user-facing surface drifts again.
 
 ---
 
-## The three tables, and why they are separate
+## The tables, and why they are separate
 
 ```sql
 commands     -- what the phantom was told to do
 detections   -- what the detector found
 presses      -- what a human said they felt
+nights       -- one row per night: the count that became the baseline
+medications  -- what she is meant to take, and when
+doses        -- what she actually took
 ```
 
 The dashboard count reads **`detections` only**. It never touches `commands`.
@@ -182,6 +290,103 @@ command was ever issued.
 This is the answer to the question every judge asks: *how do I know it isn't just
 counting your button presses?* Hand them the pod and let them tap it. Nothing is
 written to `commands`. The count still moves.
+
+`medications` and `doses` are split for the same reason. What was *prescribed*
+and what was *swallowed* are different facts, and an adherence figure only means
+something when the second is recorded independently of the first. Changing a
+schedule must not silently rewrite the history of last Tuesday.
+
+Doses are materialised lazily, for a day that has already arrived — there is no
+scheduler. A pillow that has been unplugged for a week must not wake up and claim
+she missed twenty-one doses it never asked her about.
+
+---
+
+## Sign-in, and who can read the record
+
+Identity comes from **Auth0** over OpenID Connect: Authorization Code with PKCE
+(S256), `state` and `nonce`, an encrypted single-use transaction cookie, and full
+ID-token validation with `alg` pinned to RS256.
+
+The app then keeps **its own session**, because idle logout and revocation should
+not wait for someone else's token to expire. The session token is opaque; the
+cookie is `<token>.<HMAC>`; the server stores only a SHA-256 hash, so a stolen
+database row cannot be replayed as a login. Fifteen minutes idle, twelve hours
+absolute.
+
+With no Auth0 config, every page is open — which is what a bench demo wants and
+what you must not ship. `/settings` says so in as many words when it detects it.
+
+**Gating the pages is not enough, and getting this wrong is easy.** For a while
+`/dashboard` redirected anonymous visitors while `/report` served the entire
+clinical summary and `/api/memories` the whole written narrative — alerts
+included — to anyone who could reach the port. The pages were never really gated.
+
+So the split now runs by what a route *touches*, not by whether it renders HTML:
+
+| Open, deliberately | Requires a session |
+|---|---|
+| `/api/stream`, `/api/kick`, `/api/press`, `/api/fool`, `/api/call` | `/report` |
+| `/api/vitals` (the Presage bridge posts from another process) | `/api/nights`, `/api/maternal`, `/api/memories` |
+| `/api/blind/*` (the demo controls) | `/api/meds`, `/api/dose`, `/api/settings` |
+| the phone remote itself | `/api/note`, `/api/profile`, `/api/appointment`, `/api/ask` |
+
+The left column is what the phone remote needs, and the remote has no session by
+design — it is a bedside device for one pregnancy, and the path is the identity.
+Nothing in that column reads or writes the record.
+
+API refusals are **401 JSON, not a redirect**. A 302 to the login page arrives at
+a `fetch()` as a chunk of HTML and dies inside `JSON.parse`, which makes an
+expired session look like a syntax error.
+
+There is also a demo session (`/auth/demo`) that skips sign-in entirely. It
+creates a distinct throwaway account each time, so two people demoing at once do
+not share one, and every page it renders is marked **"Demo account. Fictional
+data."** — fictional data must never pass as real on a product like this.
+
+---
+
+## The escalation call
+
+One tap on the phone remote places a real phone call, through **Vapi** with an
+ElevenLabs voice, to the emergency contact.
+
+The script is built from the same numbers on screen — a call that quotes a
+different figure from the dashboard destroys trust in both. It states the
+deviation, how many consecutive nights, and asks the person to take her to be
+seen today.
+
+Two things learned the hard way:
+
+- `VAPI_API_KEY` must be the **private** key. The public key is for browser SDKs
+  and returns 401 here; the error message says so explicitly, because that costs
+  an hour otherwise.
+- The button used to arm on the first tap and fire on the second, so a stray
+  touch could not dial. On an iPhone that failed twice over: iOS holds every tap
+  for ~300 ms to test for double-tap-to-zoom and **swallowed the second click**,
+  and a button you have to hit twice fails in front of an audience anyway. It is
+  one tap now, with `touch-action: manipulation`, and a re-entrancy lock so a
+  jittery thumb cannot place two calls.
+
+---
+
+## Maternal vitals
+
+The control arm of the whole argument. The headline claim is *the baby moved
+less* — which is only interesting if *she* did not change.
+
+**Presage SmartSpectra** (FDA 510(k) K254169, RMSE 1.32 bpm pulse / 1.75 brpm
+breathing) reads her pulse and breathing contactlessly from a camera. It is
+SDK-only, so `tools/presage-bridge` runs the SDK and POSTs to `/api/vitals`.
+
+rPPG reads surface blood flow from a face. It measures **the mother**. It cannot
+and does not measure the fetus, and the code never mixes the two sources in one
+summary.
+
+The pillow itself derives posture, respiration, wake events and snore burden from
+the accelerometers. A respiration rate the tracker cannot stand behind is
+reported as *not measured* rather than as a number — a borderline estimate
+narrated as fact is worse than a gap, on a page a clinician reads.
 
 ---
 
@@ -244,7 +449,8 @@ See [`docs/HARDWARE.md`](docs/HARDWARE.md) for the full log.
 go test ./... -race
 ```
 
-Over 200 tests. They are not decoration — several caught real defects:
+**304 tests, all passing under `-race`.** They are not decoration. Every item
+below is a real defect a test found, most of them invisible from the happy path:
 
 - `Close()` guarded its stop channel with `sync.Once` but closed the data channels
   **outside** it, so a second `Close()` panicked. `main` does `defer src.Close()`.
@@ -257,24 +463,63 @@ Over 200 tests. They are not decoration — several caught real defects:
 - Taking the dial's first sample as "rest" made the ADC's startup drift fire two
   phantom marks before anyone touched it, inflating the human count — the one
   number the whole comparison rests on.
+- `handlePress` dereferenced a nil `Store` and `handleKick` a nil `Kicker`. Both
+  sit on routes the phone remote needs open, so on a build with no local database
+  — `-source phone` is exactly that — an **anonymous** request panicked the
+  handler. `TestNoHandlerPanicsOnABareServer` now walks every route on a server
+  with nothing wired at all.
+- A biquad's startup transient was becoming the normalisation divisor in the
+  acoustic path, which manufactured three convincing "heartbeat detections" out
+  of nothing. Trusting them would have been the worst outcome in this repository.
+- The idle-timeout calculation truncated to whole seconds, so a sub-second idle
+  window rounded to zero and invalidated every session the instant it was made.
+
+A note on what tests here are *for*. Several pin behaviour that is a product
+decision rather than a correctness property: that the fetal heart-rate disclaimer
+cannot be deleted, that the clinical prompt still forbids reassurance, that no
+user-facing surface says anything but "Preggo Pillow", that removing a medication
+keeps its recorded doses. Those are the ones most likely to be broken by a
+well-meaning edit at hour thirty.
 
 ---
 
 ## Configuration
 
-Everything optional. Copy `.env.example` to `.env` and fill in what you have.
+Everything is optional. Copy `.env.example` to `.env` and fill in what you have;
+each missing key disables one capability, logs why at startup, and never stops
+the server.
 
 ```
-BACKBOARD_API_KEY       narrative memory
-TIGER_DATABASE_URL      TigerData / Timescale
-LLM_BASE_URL/KEY/MODEL  Gemini, via an OpenAI-compatible proxy
-VAPI_API_KEY            the escalation call — the PRIVATE key, not the public one
+# sign-in — unset leaves every page open, which is a bench demo, not a product
+AUTH0_DOMAIN            your tenant
+AUTH0_CLIENT_ID
+AUTH0_CLIENT_SECRET
+APP_BASE_URL            must match the port you listen on, or the callback 404s
+SESSION_SECRET          openssl rand -base64 32
+DATA_ENCRYPTION_KEY     openssl rand -base64 32 — exactly 32 bytes decoded
+
+# the escalation call
+VAPI_API_KEY            the PRIVATE key, not the public one
 VAPI_PHONE_NUMBER_ID    which of your numbers to call from
 VAPI_TO_NUMBER          who to reach
-PRESAGE_API_KEY         contactless maternal vitals (SmartSpectra SDK)
+VAPI_VOICE_ID           ElevenLabs voice
+
+# the long record and the narrative
+TIGER_DATABASE_URL      TigerData / Timescale
+BACKBOARD_API_KEY       narrative memory
+BACKBOARD_ASSISTANT_ID  pin it once you have a record worth keeping
+
+# the written note
+LLM_BASE_URL/KEY/MODEL  Gemini, via an OpenAI-compatible proxy
 ```
 
-`.env` is gitignored and should stay that way.
+**Pin `BACKBOARD_ASSISTANT_ID`.** The assistant is otherwise found *by name* at
+startup, so renaming the product creates a second, empty one and silently
+orphans everything written so far.
+
+`.env` is gitignored and should stay that way. `.env.example` is not — it was
+caught by the same `.env.*` rule for a while, which made the one file a new
+contributor needs the one file missing from the repository.
 
 ---
 
@@ -287,3 +532,42 @@ scp lull lull2@<pi>:~/
 
 Everything is cgo-free — pure-Go SQLite, pure-Go Postgres, I2C through a raw
 `ioctl` — so it cross-compiles from a Mac with no toolchain and ships as one file.
+
+```bash
+make deploy PI=pi@raspberrypi.local
+```
+
+`site/` holds the landing page as static files with a `vercel.json`, so the
+marketing page can go up without the device binary behind it.
+
+---
+
+## Status
+
+Working, verified live rather than only in tests: reference subtraction on real
+hardware (0.335 g residual; five deliberate maternal movements → zero false
+detections), the blind test (machine 3/3, human 1/3, no false positives), the
+Auth0 round trip, a real phone call placed and answered, the Presage bridge
+authenticated, and the medication and vitals round trips.
+
+Abandoned honestly: **heartbeat detection from the contact microphone.** The
+literature is clear about the method — bandpass 40–500 Hz, average Shannon energy
+`E = −x²·log(x²)`, Hann windowing — and it was implemented. The Grove microphone
+still cannot resolve a foetal heart tone through an abdominal wall. Three
+convincing "detections" turned out to be a filter transient, a moving-average
+lobe, and mains hum at a band edge. The limit is the sensor, not the algorithm,
+and the right thing to do with that is write it down rather than ship it.
+
+Not done: no real overnight trace has been recorded yet, so the replay fallback
+is still hypothetical rather than proven.
+
+---
+
+## A note on what this is
+
+This is a hackathon project. It is not a medical device, it has not been
+validated on a single real pregnancy, and nothing it produces is advice.
+
+What it does do is produce a record that did not exist before — so that
+*"he's been quieter lately"* stops being something a woman has to be believed
+about, and becomes something she can put on a table.
