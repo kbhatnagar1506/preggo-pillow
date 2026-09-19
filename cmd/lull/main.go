@@ -15,6 +15,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -22,6 +23,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -29,6 +31,7 @@ import (
 	"time"
 
 	"github.com/kbhatnagar1506/lull/internal/api"
+	"github.com/kbhatnagar1506/lull/internal/auth"
 	"github.com/kbhatnagar1506/lull/internal/clinical"
 	"github.com/kbhatnagar1506/lull/internal/detect"
 	"github.com/kbhatnagar1506/lull/internal/kicker"
@@ -334,6 +337,64 @@ func main() {
 		log.Fatalf("embed web: %v", err)
 	}
 
+	// --- Auth0 + sessions --------------------------------------------
+	// Auth0 proves identity; the app keeps its own session so it can enforce
+	// idle logout and revoke access without waiting for a token to expire.
+	var authSvc *auth.Service
+	{
+		dataKey, _ := base64.StdEncoding.DecodeString(os.Getenv("DATA_ENCRYPTION_KEY"))
+		cfg := auth.Config{
+			Domain:       os.Getenv("AUTH0_DOMAIN"),
+			ClientID:     os.Getenv("AUTH0_CLIENT_ID"),
+			ClientSecret: os.Getenv("AUTH0_CLIENT_SECRET"),
+			AppBaseURL:   firstNonEmpty(os.Getenv("APP_BASE_URL"), "http://localhost"+*addr),
+		}
+		sessions, serr := auth.NewStore(st.DB())
+		if serr != nil {
+			log.Printf("auth: session store unavailable: %v", serr)
+		} else {
+			authSvc = &auth.Service{
+				Provider:      auth.NewProvider(cfg),
+				Sessions:      sessions,
+				SessionSecret: os.Getenv("SESSION_SECRET"),
+				DataKey:       dataKey,
+			}
+			switch {
+			case authSvc.Enabled():
+				log.Printf("auth: Auth0 ready at %s", cfg.Domain)
+				log.Printf("auth: register this callback in Auth0 -> %s", cfg.RedirectURI())
+				// Auth0 compares redirect_uri byte-for-byte against the
+				// registered list. If APP_BASE_URL does not match where we are
+				// actually listening, every login fails at the callback with a
+				// generic error and nothing in our logs explains why.
+				if u, uerr := url.Parse(cfg.AppBaseURL); uerr == nil {
+					want := u.Port()
+					if want == "" {
+						if u.Scheme == "https" {
+							want = "443"
+						} else {
+							want = "80"
+						}
+					}
+					got := strings.TrimPrefix(*addr, ":")
+					if want != got {
+						log.Printf("auth: WARNING APP_BASE_URL is %s but we are listening on :%s.", cfg.AppBaseURL, got)
+						log.Printf("auth: Auth0 will send the browser to port %s and the login will fail.", want)
+						log.Printf("auth: either run with -addr :%s, or set APP_BASE_URL=http://localhost:%s", want, got)
+					}
+				}
+			case cfg.Domain == "":
+				log.Printf("auth: disabled (no AUTH0_DOMAIN); every page is open")
+			case len(dataKey) != 32:
+				log.Printf("auth: disabled — DATA_ENCRYPTION_KEY must be 32 bytes base64, got %d", len(dataKey))
+			case os.Getenv("SESSION_SECRET") == "":
+				log.Printf("auth: disabled — SESSION_SECRET is not set")
+			default:
+				log.Printf("auth: disabled — incomplete Auth0 configuration")
+			}
+		}
+	}
+
 	// Voice escalation. Unconfigured simply hides the capability; it must
 	// never stop the dashboard from serving.
 	vc := voice.New(
@@ -362,6 +423,7 @@ func main() {
 		Voice:    vc,
 		CallTo:   to,
 		Owner:    *owner,
+		Auth:     authSvc,
 		Kicker:   kk,
 		Web:      http.FS(sub),
 		Fool:     fool,

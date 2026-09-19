@@ -7,6 +7,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kbhatnagar1506/lull/internal/auth"
 	"github.com/kbhatnagar1506/lull/internal/clinical"
 	"github.com/kbhatnagar1506/lull/internal/kicker"
 	"github.com/kbhatnagar1506/lull/internal/memory"
@@ -71,6 +73,10 @@ type Server struct {
 	Hub    *Hub
 	Store  *store.Store
 	Kicker *kicker.Kicker
+
+	// Auth gates the app behind Auth0 plus our own session. Nil leaves every
+	// page open, which is what -source sim with no Auth0 config should do.
+	Auth *auth.Service
 
 	// Vitals holds contactless maternal pulse and breathing. Nil simply
 	// reports the capability as unavailable.
@@ -138,7 +144,29 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/vitals", s.handleVitals)
 	// The landing page is "/", so the dashboard needs its own path. Serving
 	// dashboard.html under a clean URL rather than exposing the file name.
-	mux.HandleFunc("/dashboard", s.handleDashboard)
+	// Auth routes and the two pages, when configured.
+	if s.Auth != nil {
+		s.Auth.Routes(mux, func(name string) ([]byte, error) {
+			if s.Web == nil {
+				return nil, errNoAssets
+			}
+			f, err := s.Web.Open(name)
+			if err != nil {
+				return nil, err
+			}
+			defer f.Close()
+			return io.ReadAll(f)
+		})
+	}
+
+	// The dashboard is gated when auth is configured and open when it is not,
+	// so a hardware demo with no Auth0 credentials still works.
+	dash := http.HandlerFunc(s.handleDashboard)
+	if s.Auth != nil && s.Auth.Enabled() {
+		mux.Handle("/dashboard", s.Auth.Require(dash))
+	} else {
+		mux.Handle("/dashboard", dash)
+	}
 	// The phone remote lives at the owner's own path. Single user by design:
 	// Lull monitors one pregnancy, and a bedside device does not need accounts.
 	if s.Owner != "" {
@@ -345,3 +373,6 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = io.Copy(w, f)
 }
+
+// errNoAssets is returned when the embedded web assets are not mounted.
+var errNoAssets = errors.New("web assets not mounted")

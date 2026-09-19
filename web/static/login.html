@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fffafc">
+<title>Sign in &middot; Preggo Pillow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+<style>
+:root{
+  --white:#ffffff; --bg:#fffafc; --surface:#ffffff;
+  --pink-50:#fff5f8; --pink-100:#ffe6ee; --pink-200:#ffcddd; --pink-300:#ffa3c0;
+  --pink-400:#f76f9d; --pink-500:#e0457f; --pink-600:#c2255f; --pink-700:#9c1a4b;
+  --ink:#2a1520; --ink-2:#5d4653; --ink-3:#85707c;
+  --line:#f4dbe5;
+  --red-50:#fff1f0; --red-100:#ffdcd8; --red-500:#d92d20; --red-600:#b42318; --red-700:#8f1c13;
+  --radius:18px; --radius-sm:12px;
+  --shadow:0 1px 2px rgba(194,37,95,.06), 0 10px 28px rgba(194,37,95,.08);
+  --font:'Nunito',ui-rounded,'Segoe UI',system-ui,-apple-system,sans-serif;
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+*{margin:0}
+body{min-height:100dvh;background:var(--bg);color:var(--ink);font-family:var(--font);
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+svg{display:block;max-width:100%}
+a{color:var(--pink-600);text-decoration:none}
+a:hover{text-decoration:underline}
+h1{font-size:1.5rem;font-weight:900;letter-spacing:-.01em}
+
+.wrap{min-height:100dvh;display:grid;place-items:center;
+  padding:24px 16px calc(24px + var(--safe-bottom));
+  background:
+    radial-gradient(900px 420px at 85% -10%, var(--pink-100), transparent 60%),
+    radial-gradient(700px 380px at -10% 110%, var(--pink-100), transparent 55%),
+    var(--bg)}
+.panel{width:100%;max-width:440px;display:flex;flex-direction:column;gap:18px}
+.brand{display:flex;justify-content:center;align-items:center;gap:10px;
+  font-weight:900;color:var(--pink-600);font-size:1.25rem}
+.card{background:#fff;border:1px solid var(--line);border-radius:24px;
+  padding:26px 22px;box-shadow:var(--shadow)}
+.heading{margin-bottom:4px}
+.sub{color:var(--ink-2);margin-bottom:18px}
+.or{display:flex;align-items:center;gap:12px;color:var(--ink-3);font-size:.8rem;
+  font-weight:700;margin:18px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.foot{text-align:center;color:var(--ink-3);font-size:.8rem;line-height:1.5}
+.stack{display:flex;flex-direction:column;gap:var(--gap,16px)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--pink-600);color:#fff;border:0;border-radius:999px;padding:13px 22px;
+  font:inherit;font-weight:800;cursor:pointer;text-decoration:none;
+  transition:filter .15s,transform .1s}
+.btn:hover{filter:brightness(.94);text-decoration:none}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2.5px solid var(--pink-700);outline-offset:2px}
+.btn-block{width:100%}
+.btn-secondary{background:var(--pink-50);color:var(--pink-700);
+  box-shadow:inset 0 0 0 1.5px var(--pink-200)}
+.notice{background:var(--pink-50);border:1px solid var(--pink-100);border-radius:var(--radius-sm);
+  padding:11px 14px;font-size:.9rem;color:var(--ink-2)}
+.field-error{background:var(--red-50);border:1px solid var(--red-100);border-radius:var(--radius-sm);
+  padding:11px 14px;font-size:.9rem;color:var(--red-700);font-weight:700}
+.hint{color:var(--ink-3);font-size:.8rem}
+</style>
+</head>
+<body>
+<main id="main" class="wrap">
+  <div class="panel">
+    <div class="brand"><svg width="44" height="44" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg> Preggo Pillow</div>
+
+    <p class="notice" role="note">
+      <strong>Sandbox.</strong> Use fictional information only. Nothing here is medical advice.
+    </p>
+
+    <div class="card">
+      <h1 class="heading">Welcome back</h1>
+      <p class="sub">Sign in to see tonight&rsquo;s pattern.</p>
+
+      <p class="field-error" id="err" role="alert" style="margin-bottom:12px" hidden></p>
+      <p class="notice" id="info" role="status" style="margin-bottom:12px" hidden></p>
+
+      <div class="stack" style="--gap:10px">
+        <a class="btn btn-block" data-auth="login" href="/auth/login">Continue with Auth0</a>
+        <a class="btn btn-block btn-secondary" data-auth="signup" href="/auth/login?screen_hint=signup">Create an account</a>
+        <p class="hint" style="text-align:center">
+          By continuing you accept the <a href="/privacy">Privacy Notice</a>.
+        </p>
+      </div>
+
+      <div class="or">or</div>
+      <p class="hint" style="text-align:center">New here? <a href="/signup">Create an account</a></p>
+    </div>
+
+    <p class="foot">
+      Preggo Pillow is not a medical device and can&rsquo;t tell you your baby is fine.
+      In an emergency, call 911.<br>
+      <a href="/privacy">Privacy Notice</a>
+    </p>
+  </div>
+</main>
+<script>
+(function(){
+  // Notices are rendered client-side from ?notice= so the same static page can
+  // serve every outcome. The wording never distinguishes "no such account"
+  // from "wrong credentials": the difference would tell an attacker which
+  // email addresses are registered here.
+  var ERRORS = {
+    "demo-limit": "Too many demo accounts from this network. Please try again later.",
+    "auth-unavailable": "Sign-in with Auth0 isn\u2019t available right now. Please try again in a moment.",
+    "auth-limit": "Too many sign-in attempts. Please wait a few minutes and try again.",
+    "auth-denied": "Sign-in was cancelled or refused. You can try again.",
+    "auth-expired": "That sign-in took too long or was already used. Please start again.",
+    "auth-failed": "We couldn\u2019t verify that sign-in. Please try again.",
+    "auth-unverified": "Please verify your email address with Auth0 first, then sign in again.",
+    "auth-mfa": "This app requires multi-factor authentication. Turn it on for your account and sign in again."
+  };
+  var INFO = {
+    timeout: "You were signed out after a period of inactivity, to protect your privacy. Please sign in again.",
+    deleted: "Your account and all of its data were deleted.",
+    "signed-out": "You are signed out."
+  };
+  var params = new URLSearchParams(location.search);
+  var notice = params.get("notice") || "";
+  var next = params.get("next") || "";
+  if (ERRORS[notice]) { var e = document.getElementById("err"); e.textContent = ERRORS[notice]; e.hidden = false; }
+  else if (INFO[notice]) { var i = document.getElementById("info"); i.textContent = INFO[notice]; i.hidden = false; }
+
+  // The browser's timezone rides along so a brand-new account starts with the
+  // right idea of "today" rather than UTC's.
+  var tz = "UTC";
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) {}
+  Array.prototype.forEach.call(document.querySelectorAll("[data-auth]"), function(a){
+    var q = new URLSearchParams({ timezone: tz });
+    if (next) q.set("next", next);
+    if (a.getAttribute("data-auth") === "signup") q.set("screen_hint", "signup");
+    // A plain link, not a form: a form would be subject to the page's
+    // form-action CSP, which Chrome also checks against the redirect target.
+    a.setAttribute("href", "/auth/login?" + q.toString());
+  });
+})();
+</script>
+</body>
+</html>

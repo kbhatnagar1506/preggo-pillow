@@ -21,6 +21,10 @@ import (
 
 type Store struct{ db *sql.DB }
 
+// DB exposes the handle so sibling packages (auth sessions) can share one
+// connection and one file rather than opening a second database.
+func (s *Store) DB() *sql.DB { return s.db }
+
 const schema = `
 CREATE TABLE IF NOT EXISTS commands (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
