@@ -6,3 +6,5 @@ data/*.db-*
 .venv/
 .env
 .env.*
+# ...but the template belongs in the repo: the README tells people to copy it.
+!.env.example
