@@ -416,6 +416,23 @@ func main() {
 	// bridge, or by anything else that can POST /api/vitals.
 	vitalStore := vitals.NewStore(2048)
 
+	// Everything this process will send data to, named on the settings page.
+	// Built from what is actually configured: a privacy claim that is typed
+	// into the HTML goes stale the first time someone wires up a database.
+	var outbound []string
+	if tg.Enabled() {
+		outbound = append(outbound, "TigerData \u2014 nightly counts and raw detections, for the long record")
+	}
+	if mem.Enabled() {
+		outbound = append(outbound, "Backboard \u2014 the written record of nights and appointments")
+	}
+	if clin.Enabled() {
+		outbound = append(outbound, "Gemini on Vertex AI \u2014 writes the provider note when you open the report")
+	}
+	if vc.Enabled() {
+		outbound = append(outbound, "Vapi \u2014 only when you press the call button")
+	}
+
 	srv := &api.Server{
 		Hub:      hub,
 		Store:    st,
@@ -423,6 +440,9 @@ func main() {
 		Voice:    vc,
 		CallTo:   to,
 		Owner:    *owner,
+		Device:   *deviceID,
+		Source:   *source,
+		Outbound: outbound,
 		Auth:     authSvc,
 		Kicker:   kk,
 		Web:      http.FS(sub),

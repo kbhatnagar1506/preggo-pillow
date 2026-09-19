@@ -91,6 +91,17 @@ type Server struct {
 	Owner string
 	Web   http.FileSystem
 
+	// Device and Source describe this physical unit, so the settings page can
+	// report what is actually running rather than what the HTML claims.
+	Device string
+	Source string
+
+	// Outbound names every service this process sends data to, filled in by
+	// main from what is actually configured. The privacy section on the
+	// settings page is rendered from this list rather than from a sentence
+	// someone typed once and then wired up a database behind.
+	Outbound []string
+
 	// Memory and Recorder are the narrative half of the product. Both are safe
 	// when nil: Lull works identically without them.
 	Memory   *memory.Client
@@ -142,6 +153,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/ask", s.handleAsk)
 	mux.HandleFunc("/api/call", s.handleCall)
 	mux.HandleFunc("/api/vitals", s.handleVitals)
+	mux.HandleFunc("/api/meds", s.handleMeds)
+	mux.HandleFunc("/api/meds/remove", s.handleMedRemove)
+	mux.HandleFunc("/api/dose", s.handleDose)
+	mux.HandleFunc("/api/settings", s.handleSettings)
 	// The landing page is "/", so the dashboard needs its own path. Serving
 	// dashboard.html under a clean URL rather than exposing the file name.
 	// Auth routes and the two pages, when configured.
@@ -159,13 +174,25 @@ func (s *Server) Routes() *http.ServeMux {
 		})
 	}
 
-	// The dashboard is gated when auth is configured and open when it is not,
-	// so a hardware demo with no Auth0 credentials still works.
-	dash := http.HandlerFunc(s.handleDashboard)
-	if s.Auth != nil && s.Auth.Enabled() {
-		mux.Handle("/dashboard", s.Auth.Require(dash))
-	} else {
-		mux.Handle("/dashboard", dash)
+	// The app pages are gated when auth is configured and open when it is
+	// not, so a hardware demo with no Auth0 credentials still works.
+	//
+	// Every link in the sidebar is registered here. A menu item that 404s is
+	// worse than a missing menu item: the judge clicks it first.
+	gate := func(h http.Handler) http.Handler {
+		if s.Auth != nil && s.Auth.Enabled() {
+			return s.Auth.Require(h)
+		}
+		return h
+	}
+	for path, file := range map[string]string{
+		"/dashboard":   "dashboard.html",
+		"/history":     "history.html",
+		"/healthcare":  "healthcare.html",
+		"/medications": "medications.html",
+		"/settings":    "settings.html",
+	} {
+		mux.Handle(path, gate(s.page(file)))
 	}
 	// The phone remote lives at the owner's own path. Single user by design:
 	// Lull monitors one pregnancy, and a bedside device does not need accounts.
@@ -360,18 +387,26 @@ func writeJSON(w http.ResponseWriter, v any) {
 // handleDashboard serves the operator dashboard at a clean path, so "/" can be
 // the landing page.
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	if s.Web == nil {
-		http.Error(w, "dashboard assets not mounted", http.StatusServiceUnavailable)
-		return
-	}
-	f, err := s.Web.Open("dashboard.html")
-	if err != nil {
-		http.Error(w, "dashboard not found", http.StatusNotFound)
-		return
-	}
-	defer f.Close()
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = io.Copy(w, f)
+	s.page("dashboard.html").ServeHTTP(w, r)
+}
+
+// page serves one embedded HTML file at a clean URL, so "/" stays the landing
+// page and no route leaks a ".html" into the address bar.
+func (s *Server) page(file string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.Web == nil {
+			http.Error(w, "dashboard assets not mounted", http.StatusServiceUnavailable)
+			return
+		}
+		f, err := s.Web.Open(file)
+		if err != nil {
+			http.Error(w, "page not found", http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.Copy(w, f)
+	})
 }
 
 // errNoAssets is returned when the embedded web assets are not mounted.

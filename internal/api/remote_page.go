@@ -17,6 +17,11 @@ const remotePage = `<!doctype html>
     --edge:#232a3d; --calm:#5fd3c4; --warm:#f2a25c; --alarm:#e8615a;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* Without this, iOS Safari holds every tap for ~300ms to see whether a
+     second one is coming, and then treats the pair as double-tap-to-zoom and
+     never delivers the second click. The arm-then-confirm call button needs
+     exactly that gesture, so it never fired on an iPhone. */
+  button,a,[role=button]{touch-action:manipulation}
   body{margin:0;background:var(--ground);color:var(--ink);
     font:16px/1.4 ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif;
     padding:env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
@@ -214,23 +219,34 @@ const remotePage = `<!doctype html>
   });
 
   // A real phone call must not fire on a stray tap, so it takes two.
-  var armed = false, armTimer = null;
+  // Ten seconds, counted down on the button itself. Five was short enough
+  // that a real thumb, on a real phone, in a dim room, missed it.
+  var ARM_MS = 10000;
+  var armed = false, armTimer = null, tickTimer = null;
+  function disarm(why){
+    armed = false;
+    clearTimeout(armTimer); clearInterval(tickTimer);
+    var btn = $("call");
+    btn.classList.remove("armed");
+    btn.textContent = "Call the emergency contact";
+    if (why) log(why);
+  }
   $("call").addEventListener("click", function(){
     var btn = $("call");
     if (!armed) {
       armed = true;
       btn.classList.add("armed");
-      btn.textContent = "Tap again to call";
+      var left = ARM_MS / 1000;
+      btn.textContent = "Tap again to call \u00b7 " + left;
       log("armed - tap again to place the call");
-      armTimer = setTimeout(function(){
-        armed = false;
-        btn.classList.remove("armed");
-        btn.textContent = "Call the emergency contact";
-        log("call disarmed");
-      }, 5000);
+      tickTimer = setInterval(function(){
+        left--;
+        if (left > 0) btn.textContent = "Tap again to call \u00b7 " + left;
+      }, 1000);
+      armTimer = setTimeout(function(){ disarm("call disarmed"); }, ARM_MS);
       return;
     }
-    clearTimeout(armTimer);
+    clearTimeout(armTimer); clearInterval(tickTimer);
     armed = false;
     btn.classList.remove("armed");
     btn.textContent = "Calling...";

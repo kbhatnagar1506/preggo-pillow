@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fffafc">
+<title>Healthcare &middot; Preggo Pillow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<div class="shell">
+  <header class="topbar">
+    <button class="icon-btn" id="menu-open" aria-label="Open menu" aria-expanded="false" aria-controls="side-nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <span class="brand"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg> Preggo Pillow</span>
+    <span style="width:44px" aria-hidden="true"></span>
+  </header>
+
+  <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+
+  <aside class="sidebar" id="side-nav" aria-label="Main">
+    <div class="sidebar-head">
+      <span class="brand"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg> Preggo Pillow</span>
+      <button class="icon-btn" id="menu-close" aria-label="Close menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <nav class="nav">
+        <a href="/dashboard" class="active"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg> Dashboard</a>
+        <a href="/history"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg> History</a>
+        <a href="/healthcare"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Healthcare</a>
+        <a href="/medications"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"/><path d="M8.5 8.5l7 7"/></svg> Medications</a>
+        <a href="/settings"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="user">
+        <span class="avatar" id="avatar">D</span>
+        <span>
+          <span class="user-name" id="user-name">Loading&hellip;</span><br>
+          <span class="user-meta" id="user-meta">&nbsp;</span>
+        </span>
+      </div>
+      <a class="btn warn" href="/auth/logout"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg> Sign out</a>
+    </div>
+  </aside>
+
+  <main class="content"><div class="inner stack" style="--gap:20px">
+
+    <header>
+      <p class="eyebrow">Healthcare</p>
+      <h1 id="greeting" data-greet="off">Your record</h1>
+      <p class="muted">What this pillow measured, written in a form a midwife can read in thirty seconds.</p>
+    </header>
+
+    <p class="notice" id="demo-notice" role="status" hidden>
+      <strong>Demo account.</strong> Fictional data. Nothing here is medical advice.
+    </p>
+
+    <section class="card" aria-labelledby="report-title">
+      <div class="card-title">
+        <h2 id="report-title">The page you take to your appointment</h2>
+        <span class="badge badge-quiet">GTG&nbsp;57</span>
+      </div>
+      <p class="muted">
+        Fourteen nights of counts, this baby&rsquo;s own baseline, and what changed &mdash; written out so
+        &ldquo;he&rsquo;s been quieter&rdquo; stops being something you have to be believed about.
+      </p>
+      <dl class="kv" style="margin-top:14px">
+        <dt>Baseline</dt><dd id="r-baseline">&mdash;</dd>
+        <dt>Last night</dt><dd id="r-latest">&mdash;</dd>
+        <dt>Against baseline</dt><dd id="r-dev">&mdash;</dd>
+        <dt>Nights on record</dt><dd id="r-nights">&mdash;</dd>
+      </dl>
+      <div class="row" style="margin-top:16px">
+        <a class="btn" href="/report" target="_blank" rel="noopener">Open the report</a>
+      </div>
+      <p class="footnote">
+        It opens in a new tab and prints straight from the browser &mdash; print to PDF if you would rather send it
+        ahead. It states what was measured and never states that your baby is well: no accelerometer can establish
+        that, and a device that implied it would be dangerous.
+      </p>
+    </section>
+
+    <div class="grid grid-2" style="align-items:start">
+      <section class="card" aria-labelledby="appt-title">
+        <div class="card-title"><h2 id="appt-title">After an appointment</h2></div>
+        <p class="muted" style="margin-bottom:12px">
+          Write down what you were told. Without it, the next appointment starts from nothing.
+        </p>
+        <form id="appt" class="stack" style="--gap:12px">
+          <div class="field">
+            <label for="a-when">When</label>
+            <input id="a-when" type="date">
+          </div>
+          <div class="field">
+            <label for="a-what">What you were told</label>
+            <textarea id="a-what" rows="4" required
+              placeholder="Monitored for 20 minutes. Trace normal. Told to come back if the pattern changes again."></textarea>
+          </div>
+          <div class="row">
+            <button class="btn" type="submit">Save to the record</button>
+            <span class="faint" id="a-msg" role="status"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="record-title">
+        <div class="card-title">
+          <h2 id="record-title">The running record</h2>
+          <span class="badge badge-quiet" id="mem-count" hidden></span>
+        </div>
+        <div id="memories"><p class="faint">Loading&hellip;</p></div>
+      </section>
+    </div>
+
+    <section class="card-soft" aria-labelledby="docs-title">
+      <h2 id="docs-title" style="margin-bottom:8px">Scans, letters and test results</h2>
+      <p class="muted">
+        Document upload lives in the Preggo&nbsp;Pillow web app, where files are encrypted before storage and every
+        view is written to an audit log. The pillow itself stores movement counts and the record above &mdash; it is a
+        bedside device, and a bedside device is the wrong place to keep a folder of medical records.
+      </p>
+    </section>
+
+  </div></main>
+</div>
+
+<script src="/app.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+    });
+  };
+
+  fetch('/api/nights').then(function (r) { return r.json(); }).then(function (d) {
+    var b = d.baseline || 0, n = (d.nights || []).length;
+    $('r-baseline').textContent = b > 0 ? Math.round(b) + ' movements / night' : 'not set yet';
+    $('r-latest').textContent = d.latest != null ? d.latest + ' movements' : '\u2014';
+    var pct = Math.round((d.deviation || 0) * 100);
+    $('r-dev').textContent = b > 0 ? (pct >= 0 ? '+' : '') + pct + '%' : '\u2014';
+    if (d.alert) $('r-dev').style.color = 'var(--red-600)';
+    $('r-nights').textContent = n + (n === 1 ? ' night' : ' nights');
+  }).catch(function () {});
+
+  fetch('/api/memories').then(function (r) { return r.json(); }).then(function (m) {
+    if (!m.enabled) {
+      $('memories').innerHTML = '<p class="empty faint">The running record is not configured on this device.</p>';
+      return;
+    }
+    var list = m.memories || [];
+    if (m.total) { $('mem-count').hidden = false; $('mem-count').textContent = m.total + ' entries'; }
+    $('memories').innerHTML = list.length
+      ? '<ul class="list">' + list.map(function (x) {
+          return '<li>' + esc(x.content || '') + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="empty faint">Nothing written down yet.</p>';
+  }).catch(function () {
+    $('memories').innerHTML = '<p class="empty faint">Could not reach the record.</p>';
+  });
+
+  $('a-when').value = new Date().toISOString().slice(0, 10);
+  $('appt').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var msg = $('a-msg');
+    var when = $('a-when').value
+      ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+          .format(new Date($('a-when').value + 'T00:00:00'))
+      : '';
+    msg.textContent = 'Saving\u2026';
+    fetch('/api/appointment', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ when: when, what: $('a-what').value })
+    }).then(function (r) {
+      if (!r.ok) { msg.textContent = 'Could not save that.'; return; }
+      msg.textContent = 'Saved.';
+      $('a-what').value = '';
+      setTimeout(function () { location.reload(); }, 700);
+    }).catch(function () { msg.textContent = 'Could not reach the pillow.'; });
+  });
+})();
+</script>
+</body>
+</html>

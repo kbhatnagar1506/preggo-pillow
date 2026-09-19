@@ -69,6 +69,9 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
+	if _, err := db.Exec(medsSchema); err != nil {
+		return nil, fmt.Errorf("create medication schema: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 

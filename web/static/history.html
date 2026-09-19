@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fffafc">
+<title>History &middot; Preggo Pillow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<div class="shell">
+  <header class="topbar">
+    <button class="icon-btn" id="menu-open" aria-label="Open menu" aria-expanded="false" aria-controls="side-nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <span class="brand"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg> Preggo Pillow</span>
+    <span style="width:44px" aria-hidden="true"></span>
+  </header>
+
+  <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+
+  <aside class="sidebar" id="side-nav" aria-label="Main">
+    <div class="sidebar-head">
+      <span class="brand"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#c2255f" stroke-width="2.2"/><path d="M16 8.5V16l5 3" fill="none" stroke="#c2255f" stroke-width="2.2" stroke-linecap="round"/></svg> Preggo Pillow</span>
+      <button class="icon-btn" id="menu-close" aria-label="Close menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <nav class="nav">
+        <a href="/dashboard" class="active"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg> Dashboard</a>
+        <a href="/history"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg> History</a>
+        <a href="/healthcare"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Healthcare</a>
+        <a href="/medications"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"/><path d="M8.5 8.5l7 7"/></svg> Medications</a>
+        <a href="/settings"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="user">
+        <span class="avatar" id="avatar">D</span>
+        <span>
+          <span class="user-name" id="user-name">Loading&hellip;</span><br>
+          <span class="user-meta" id="user-meta">&nbsp;</span>
+        </span>
+      </div>
+      <a class="btn warn" href="/auth/logout"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg> Sign out</a>
+    </div>
+  </aside>
+
+  <main class="content"><div class="inner stack" style="--gap:20px">
+
+    <header>
+      <p class="eyebrow">History</p>
+      <h1 id="greeting" data-greet="off">The last 14 nights</h1>
+      <p class="muted">How your baby moved, night by night, measured against your baby&rsquo;s own pattern.</p>
+    </header>
+
+    <p class="notice" id="demo-notice" role="status" hidden>
+      <strong>Demo account.</strong> Fictional data. Nothing here is medical advice.
+    </p>
+
+    <section class="card" aria-labelledby="trend-title">
+      <div class="card-title">
+        <h2 id="trend-title">Kicks per night</h2>
+        <span class="badge badge-quiet" id="avg">&nbsp;</span>
+      </div>
+      <div class="bars" id="bars" style="height:110px" role="img" aria-label="Kicks per night over the last two weeks" aria-describedby="bars-table-note"></div>
+      <div class="ticks" id="ticks" aria-hidden="true"></div>
+      <div class="legend">
+        <span><span class="mood" style="width:10px;height:10px;display:inline-block;vertical-align:-1px"></span> a night</span>
+        <span><span class="mood" style="width:10px;height:10px;display:inline-block;vertical-align:-1px;background:var(--red-500)"></span> 25% or more below baseline</span>
+        <span id="baseline-note"></span>
+      </div>
+      <p class="footnote" id="bars-table-note">
+        Totals show volume, not wellbeing. A quiet night is usually a sleeping baby &mdash; what matters is a
+        <strong>sustained</strong> drop against this baby&rsquo;s own pattern, which is why nothing is flagged on a single night.
+      </p>
+    </section>
+
+    <section class="stack" style="--gap:12px" aria-label="Night by night">
+      <h2>Night by night</h2>
+      <div class="stack" style="--gap:12px" id="days">
+        <p class="empty faint">Loading&hellip;</p>
+      </div>
+    </section>
+
+    <p class="footnote">
+      Check-ins, symptoms and cravings are entered in the Preggo Pillow app and are not stored on the pillow itself.
+      This page shows what the device measured.
+    </p>
+
+  </div></main>
+</div>
+
+<script src="/app.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var DAYS = 14;
+  var fmtDay = function (ymd) {
+    return new Intl.DateTimeFormat('en-GB', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+      .format(new Date(ymd + 'T00:00:00Z'));
+  };
+  var narrow = function (ymd) {
+    return new Intl.DateTimeFormat('en-GB', { weekday: 'narrow', timeZone: 'UTC' })
+      .format(new Date(ymd + 'T00:00:00Z'));
+  };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+    });
+  };
+
+  fetch('/api/nights').then(function (r) { return r.json(); }).then(function (d) {
+    var all = d.nights || [];
+    var nights = all.slice(-DAYS);            // oldest first, as stored
+    var baseline = d.baseline || 0;
+    // The same rule the alert uses: a night counts as low at 25% or more
+    // below this baby's own baseline. One low night is not an alert.
+    var low = function (n) { return baseline > 0 && n.kick_count <= baseline * 0.75; };
+
+    if (!nights.length) {
+      $('days').innerHTML = '<p class="empty faint">No nights recorded yet. The first full night sets the baseline.</p>';
+      $('bars').remove(); $('ticks').remove();
+      return;
+    }
+
+    var avg = Math.round(nights.reduce(function (s, n) { return s + n.kick_count; }, 0) / nights.length);
+    $('avg').textContent = 'avg ' + avg + ' / night';
+    if (baseline > 0) $('baseline-note').textContent = 'baseline ' + Math.round(baseline);
+
+    var peak = Math.max.apply(null, nights.map(function (n) { return n.kick_count; })) || 1;
+    $('bars').innerHTML = nights.map(function (n) {
+      var h = Math.max(4, Math.round(n.kick_count / peak * 100));
+      return '<div class="b' + (low(n) ? ' low' : '') + '" style="height:' + h + '%" title="' +
+        esc(fmtDay(n.date)) + ': ' + n.kick_count + ' kicks"></div>';
+    }).join('');
+    $('ticks').style.gridTemplateColumns = 'repeat(' + nights.length + ',1fr)';
+    $('ticks').innerHTML = nights.map(function (n) { return '<span>' + esc(narrow(n.date)) + '</span>'; }).join('');
+
+    // Newest first on screen; people look for last night, not a fortnight ago.
+    var recent = nights.slice().reverse();
+    $('days').innerHTML = recent.map(function (n, i) {
+      var pct = baseline > 0 ? Math.round((n.kick_count - baseline) / baseline * 100) : null;
+      var prev = recent[i + 1];
+      var twoLow = low(n) && prev && low(prev);
+      var open = i < 2 || twoLow;
+      return '' +
+        '<details class="card"' + (open ? ' open' : '') + '>' +
+          '<summary>' +
+            '<div><h3>' + esc(fmtDay(n.date)) + '</h3>' +
+              '<p class="faint">' + n.kick_count + ' movements' +
+                (pct === null ? '' : ' &middot; ' + (pct >= 0 ? '+' : '') + pct + '% vs baseline') +
+              '</p></div>' +
+            '<div class="row-wrap">' +
+              (twoLow ? '<span class="badge badge-red">needs a call</span>' : '') +
+              (n.simulated ? '<span class="badge badge-quiet">simulated</span>' : '') +
+            '</div>' +
+          '</summary>' +
+          '<div class="stack" style="padding:0 18px 18px;--gap:14px">' +
+            (twoLow
+              ? '<div class="alert"><h3>Second night in a row below this baby&rsquo;s pattern</h3>' +
+                '<p style="margin-top:6px">RCOG Green-top Guideline No. 57 has no universal kick-count threshold. ' +
+                'What it does say is that a change in an individual pattern, on more than one occasion, is the signal worth acting on. ' +
+                'Call your midwife or maternity unit &mdash; today, not at the next appointment.</p></div>'
+              : '') +
+            '<dl class="kv">' +
+              '<dt>Movements</dt><dd>' + n.kick_count + '</dd>' +
+              '<dt>Baseline</dt><dd>' + (baseline > 0 ? Math.round(baseline) + ' / night' : 'not set yet') + '</dd>' +
+              '<dt>Against baseline</dt><dd>' + (pct === null ? '&mdash;' : (pct >= 0 ? '+' : '') + pct + '%') + '</dd>' +
+              '<dt>Source</dt><dd>' + (n.simulated ? 'Simulated night' : 'Measured by the pillow') + '</dd>' +
+            '</dl>' +
+            (n.simulated
+              ? '<p class="faint">This night was generated to fill out the baseline during setup. It is labelled everywhere it appears.</p>'
+              : '') +
+          '</div>' +
+        '</details>';
+    }).join('');
+  }).catch(function () {
+    $('days').innerHTML = '<p class="empty faint">Could not reach the pillow.</p>';
+  });
+})();
+</script>
+</body>
+</html>

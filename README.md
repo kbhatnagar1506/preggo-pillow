@@ -59,8 +59,18 @@ Then open:
 |---|---|
 | `http://localhost:8080/` | the landing page |
 | `http://localhost:8080/dashboard` | the live operator dashboard |
+| `http://localhost:8080/history` | the last 14 nights, against this baby's baseline |
+| `http://localhost:8080/healthcare` | the record you take to the appointment |
+| `http://localhost:8080/medications` | reminders, stored on the device |
+| `http://localhost:8080/settings` | what this pillow is actually wired to |
 | `http://localhost:8080/report` | the clinician's record |
 | `http://localhost:8080/krishnabhatnagar` | the phone remote |
+
+The five app pages share one shell: `web/static/app.css` and `web/static/app.js`
+hold the navigation, and each page's HTML carries an identical `<nav>` block
+whose active link is decided from the URL. `TestEveryLinkInTheSidebarResolves`
+reads the hrefs out of the shipped HTML and asks the router for each one, so a
+menu item can never point at a route that does not exist.
 
 Nothing external is required — `-source sim` runs the whole product against a
 simulated pregnancy. Sponsors (Backboard, TigerData, Gemini, Vapi) activate only
@@ -146,7 +156,7 @@ internal/
   clinical          the Gemini note, implementing RCOG GTG-57
   voice             the escalation phone call (Vapi + 11Labs)
   api               HTTP, SSE, the report, the phone remote
-web/static          landing page + dashboard, embedded in the binary
+web/static          landing page + the five app pages, embedded in the binary
 site/               the same landing page, standalone, for Vercel
 ```
 
