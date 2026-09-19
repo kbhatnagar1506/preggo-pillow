@@ -59,7 +59,7 @@ func TestCallFiresOnOneTapButNotTwice(t *testing.T) {
 	if strings.Contains(remotePage, "Tap again to call") {
 		t.Error("the call button still requires a second tap")
 	}
-	for _, want := range []string{"var calling = false", "if (calling)", `post("/api/call")`} {
+	for _, want := range []string{"var calling = false", "if (calling)", `post("/api/call"`} {
 		if !strings.Contains(remotePage, want) {
 			t.Errorf("the call button is missing %q", want)
 		}
@@ -262,4 +262,51 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// With a live Vapi key on a public box, an open /api/call means anyone who
+// finds the URL can ring a real person's phone at someone else's expense.
+func TestCallTokenGatesTheCallWithoutBreakingTheLocalDemo(t *testing.T) {
+	withToken := &Server{Hub: NewHub(), Owner: "demo", CallToken: "s3cret",
+		Voice: voice.New("k", "pn", ""), CallTo: "+15555550123"}
+	mux := withToken.Routes()
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/call", nil))
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("POST /api/call with no token -> %d, want 403", rr.Code)
+	}
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/call?k=wrong", nil))
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("POST /api/call with a wrong token -> %d, want 403", rr.Code)
+	}
+
+	// The page hands the token to the button only when the visitor already
+	// had it, so a scanner that loads the page cannot read it off the HTML.
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/demo", nil))
+	if strings.Contains(rr.Body.String(), "s3cret") {
+		t.Error("the remote page leaked the call token to an unauthenticated visitor")
+	}
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/demo?k=s3cret", nil))
+	if !strings.Contains(rr.Body.String(), "s3cret") {
+		t.Error("the remote page withheld the token from a visitor who had it")
+	}
+
+	// No token configured: nothing changes for the Pi or the local demo.
+	open := &Server{Hub: NewHub(), Owner: "demo", Voice: voice.New("k", "pn", ""), CallTo: "+15555550123"}
+	rr = httptest.NewRecorder()
+	open.Routes().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/call", nil))
+	if rr.Code == http.StatusForbidden {
+		t.Error("an unconfigured token still blocked the call; the local demo would break")
+	}
+	// And the placeholder must never survive into the served page.
+	rr = httptest.NewRecorder()
+	open.Routes().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/demo", nil))
+	if strings.Contains(rr.Body.String(), "{{CALL_TOKEN}}") {
+		t.Error("the remote page shipped an unsubstituted placeholder")
+	}
 }

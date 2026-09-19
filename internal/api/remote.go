@@ -10,8 +10,10 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -24,7 +26,33 @@ import (
 func (s *Server) handleRemote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	fmt.Fprint(w, remotePage)
+
+	// The page is public by design — a bedside remote has no account. That is
+	// fine while it only fires a servo. It stops being fine the moment a live
+	// Vapi key is on the box, because then anyone who finds the URL can ring
+	// a real person's phone, repeatedly, at someone else's expense.
+	//
+	// So when CallToken is set, the call button only receives it if the
+	// request already knew it. Everything else on the page still works.
+	token := ""
+	if s.CallToken != "" && subtle.ConstantTimeCompare(
+		[]byte(r.URL.Query().Get("k")), []byte(s.CallToken)) == 1 {
+		token = s.CallToken
+	}
+	fmt.Fprint(w, strings.ReplaceAll(remotePage, "{{CALL_TOKEN}}", template.HTMLEscapeString(token)))
+}
+
+// callAuthorised reports whether this request may place a call. With no token
+// configured nothing changes: the local demo and the Pi keep working.
+func (s *Server) callAuthorised(r *http.Request) bool {
+	if s.CallToken == "" {
+		return true
+	}
+	given := r.URL.Query().Get("k")
+	if given == "" {
+		given = r.Header.Get("X-Call-Token")
+	}
+	return subtle.ConstantTimeCompare([]byte(given), []byte(s.CallToken)) == 1
 }
 
 type callResponse struct {
@@ -44,6 +72,11 @@ func (s *Server) handleCall(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		_ = json.NewEncoder(w).Encode(callResponse{Error: "POST only"})
+		return
+	}
+	if !s.callAuthorised(r) {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(callResponse{Error: "not authorised to place calls from here"})
 		return
 	}
 	if s.Voice == nil || !s.Voice.Enabled() {

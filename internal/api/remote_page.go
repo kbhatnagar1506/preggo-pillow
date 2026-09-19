@@ -105,7 +105,7 @@ const remotePage = `<!doctype html>
 </div>
 
 <div class="grid">
-  <button class="call wide" id="call">Call the emergency contact</button>
+  <button class="call wide" id="call" data-k="{{CALL_TOKEN}}">Call the emergency contact</button>
 </div>
 
 <p class="note" id="callnote">Places a real phone call to the emergency contact.</p>
@@ -234,7 +234,7 @@ const remotePage = `<!doctype html>
     btn.classList.add("armed");
     btn.textContent = "Calling\u2026";
     log("placing call");
-    post("/api/call").then(function(j){
+    post("/api/call" + (btn.dataset.k ? "?k=" + encodeURIComponent(btn.dataset.k) : "")).then(function(j){
       if (j && j.ok) {
         btn.textContent = "Called \u2713";
         log("calling " + j.to + " - " + (j.status || "queued"));

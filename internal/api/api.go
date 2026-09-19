@@ -100,7 +100,10 @@ type Server struct {
 	CallTo string
 	// Owner is the path the phone remote is served at, e.g. "krishnabhatnagar".
 	Owner string
-	Web   http.FileSystem
+	// CallToken, when set, is required to place a call. Empty keeps the local
+	// behaviour: the button just works.
+	CallToken string
+	Web       http.FileSystem
 
 	// Device and Source describe this physical unit, so the settings page can
 	// report what is actually running rather than what the HTML claims.
