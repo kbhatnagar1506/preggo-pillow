@@ -51,6 +51,7 @@ func (s *Service) Routes(mux *http.ServeMux, pages func(name string) ([]byte, er
 	mux.HandleFunc("/auth/login", s.handleLogin)
 	mux.HandleFunc("/auth/callback", s.handleCallback)
 	mux.HandleFunc("/auth/logout", s.handleLogout)
+	mux.HandleFunc("/auth/demo", s.handleDemo)
 	mux.HandleFunc("/login", pageHandler(pages, "login.html"))
 	mux.HandleFunc("/signup", pageHandler(pages, "signup.html"))
 	mux.HandleFunc("/api/me", s.handleMe)
@@ -238,6 +239,58 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/login?notice=signed-out", http.StatusFound)
+}
+
+// ------------------------------------------------------------------ /auth/demo
+
+// handleDemo signs someone straight in as a fictional account.
+//
+// A judge with four minutes will not create an Auth0 account, and a login wall
+// in front of a demo costs more than it protects. The account is marked
+// is_demo so the UI can say so, and it is a real session on the real code path
+// — not an auth bypass, which would leave the gate untested.
+func (s *Service) handleDemo(w http.ResponseWriter, r *http.Request) {
+	if s == nil || s.Sessions == nil {
+		http.Redirect(w, r, "/login?notice=auth-unavailable", http.StatusFound)
+		return
+	}
+	if !s.limiter.allow("demo:"+clientIP(r), 20, 10*time.Minute) {
+		s.back(w, r, "demo-limit")
+		return
+	}
+
+	suffix, err := RandomToken(6)
+	if err != nil {
+		s.back(w, r, "auth-failed")
+		return
+	}
+	// A distinct account each time, so two people demoing at once do not share
+	// a session or overwrite each other.
+	id := Identity{
+		Sub:           "demo|" + suffix,
+		Email:         "demo-" + strings.ToLower(suffix) + "@example.invalid",
+		EmailVerified: true,
+		Name:          "Demo",
+	}
+	user, _, err := s.Sessions.ResolveAuth0User(id, TimezoneFrom(r.URL.Query().Get("timezone")))
+	if err != nil {
+		s.logf("demo account: %v", err)
+		s.back(w, r, "auth-failed")
+		return
+	}
+	if _, err := s.Sessions.DB.Exec(`UPDATE users SET is_demo = 1 WHERE id = ?`, user.ID); err != nil {
+		s.logf("demo flag: %v", err)
+	}
+	token, err := s.Sessions.Create(user.ID, clientIP(r), r.UserAgent())
+	if err != nil {
+		s.logf("demo session: %v", err)
+		s.back(w, r, "auth-failed")
+		return
+	}
+	setCookie(w, CookieName(s.secure()), SignToken(token, s.SessionSecret),
+		int(s.Sessions.Absolute/time.Second), s.secure())
+	s.logf("auth.demo: user=%s", user.ID)
+	http.Redirect(w, r, SafeNext(r.URL.Query().Get("next")), http.StatusFound)
 }
 
 // -------------------------------------------------------------------- session

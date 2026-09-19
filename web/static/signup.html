@@ -91,6 +91,13 @@ h1{font-size:1.5rem;font-weight:900;letter-spacing:-.01em}
       </div>
 
       <div class="or">or</div>
+
+      <a class="btn btn-block btn-secondary" data-auth="demo" href="/auth/demo">Try the demo &middot; no signup</a>
+      <p class="hint" style="text-align:center;margin-top:8px">
+        Skips sign-in and opens a fictional account with two weeks of sample data.
+      </p>
+
+      <div class="or">or</div>
       <p class="hint" style="text-align:center">Already registered? <a href="/login">Sign in</a></p>
     </div>
 
@@ -135,7 +142,9 @@ h1{font-size:1.5rem;font-weight:900;letter-spacing:-.01em}
   Array.prototype.forEach.call(document.querySelectorAll("[data-auth]"), function(a){
     var q = new URLSearchParams({ timezone: tz });
     if (next) q.set("next", next);
-    if (a.getAttribute("data-auth") === "signup") q.set("screen_hint", "signup");
+    var kind = a.getAttribute("data-auth");
+    if (kind === "signup") q.set("screen_hint", "signup");
+    if (kind === "demo") { a.setAttribute("href", "/auth/demo?" + q.toString()); return; }
     // A plain link, not a form: a form would be subject to the page's
     // form-action CSP, which Chrome also checks against the redirect target.
     a.setAttribute("href", "/auth/login?" + q.toString());

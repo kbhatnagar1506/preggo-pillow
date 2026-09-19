@@ -417,3 +417,73 @@ func TestZeroIdleFallsBackToTheDefault(t *testing.T) {
 		t.Error("an unset idle window should fall back to the default, not lock everyone out")
 	}
 }
+
+// The demo path must be a real session on the real code path, not a bypass —
+// a bypass would leave the gate itself untested.
+func TestDemoCreatesARealSession(t *testing.T) {
+	s := svc(t)
+	rr := httptest.NewRecorder()
+	s.handleDemo(rr, httptest.NewRequest(http.MethodGet, "/auth/demo", nil))
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("code = %d", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); loc != "/dashboard" {
+		t.Errorf("should land on the dashboard, got %q", loc)
+	}
+	cookies := rr.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("no session cookie was set")
+	}
+	c := cookies[0]
+	if c.Name != CookieName(false) || !c.HttpOnly || c.SameSite != http.SameSiteLaxMode {
+		t.Errorf("demo cookie is not a proper session cookie: %+v", c)
+	}
+	// And it must actually pass the gate.
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req.AddCookie(c)
+	reached := false
+	s.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true })).
+		ServeHTTP(httptest.NewRecorder(), req)
+	if !reached {
+		t.Error("the demo session did not pass Require")
+	}
+}
+
+// Two people demoing at once must not share an account or overwrite each
+// other's night.
+func TestDemoAccountsAreDistinct(t *testing.T) {
+	s := svc(t)
+	seen := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		rr := httptest.NewRecorder()
+		s.handleDemo(rr, httptest.NewRequest(http.MethodGet, "/auth/demo", nil))
+		tok := VerifySignedToken(rr.Result().Cookies()[0].Value, s.SessionSecret)
+		u, ok := s.Sessions.Read(tok, false)
+		if !ok {
+			t.Fatalf("demo session %d did not resolve", i)
+		}
+		if seen[u.ID] {
+			t.Fatalf("demo account %s was reused", u.ID)
+		}
+		seen[u.ID] = true
+		if !u.IsDemo {
+			t.Errorf("account %s is not flagged is_demo; the UI cannot say it is fictional", u.ID)
+		}
+	}
+}
+
+func TestDemoHonoursNext(t *testing.T) {
+	s := svc(t)
+	rr := httptest.NewRecorder()
+	s.handleDemo(rr, httptest.NewRequest(http.MethodGet, "/auth/demo?next=%2Freport", nil))
+	if loc := rr.Header().Get("Location"); loc != "/report" {
+		t.Errorf("got %q", loc)
+	}
+	// but not off-site
+	rr2 := httptest.NewRecorder()
+	s.handleDemo(rr2, httptest.NewRequest(http.MethodGet, "/auth/demo?next=https%3A%2F%2Fevil.example", nil))
+	if loc := rr2.Header().Get("Location"); loc != "/dashboard" {
+		t.Errorf("demo next is an open redirect: %q", loc)
+	}
+}
