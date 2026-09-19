@@ -37,32 +37,32 @@
   "redirects": [
     {
       "source": "/dashboard",
-      "destination": "http://35.232.223.194/dashboard",
+      "destination": "https://35.232.223.194.nip.io/dashboard",
       "permanent": false
     },
     {
       "source": "/history",
-      "destination": "http://35.232.223.194/history",
+      "destination": "https://35.232.223.194.nip.io/history",
       "permanent": false
     },
     {
       "source": "/healthcare",
-      "destination": "http://35.232.223.194/healthcare",
+      "destination": "https://35.232.223.194.nip.io/healthcare",
       "permanent": false
     },
     {
       "source": "/medications",
-      "destination": "http://35.232.223.194/medications",
+      "destination": "https://35.232.223.194.nip.io/medications",
       "permanent": false
     },
     {
       "source": "/settings",
-      "destination": "http://35.232.223.194/settings",
+      "destination": "https://35.232.223.194.nip.io/settings",
       "permanent": false
     },
     {
       "source": "/report",
-      "destination": "http://35.232.223.194/report",
+      "destination": "https://35.232.223.194.nip.io/report",
       "permanent": false
     }
   ]
