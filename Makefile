@@ -29,3 +29,7 @@ test:
 
 clean:
 	rm -rf bin data/lull.db
+
+site:                 ## regenerate the standalone landing page from the embedded one
+	@cp web/static/index.html site/index.html
+	@echo "site/index.html regenerated. Where the app lives is set in site/vercel.json."

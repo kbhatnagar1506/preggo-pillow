@@ -23,14 +23,25 @@ npx vercel deploy --prod
 Vercel serves the directory as-is; `vercel.json` only sets clean URLs and
 security headers.
 
-## Before you deploy
+## Where the app lives
 
-`index.html` here contains `{{APP_URL}}` placeholders where the app version
-links to `/dashboard`. Replace them with wherever the dashboard is reachable:
+`index.html` here is **byte-identical** to `web/static/index.html`, the copy the
+Go binary embeds and serves at `/`. Regenerate it with `make site` from the repo
+root; a test fails if the two drift.
 
-```bash
-sed -i '' 's|{{APP_URL}}|https://your-app-host|g' index.html
+Its links are plain paths — `/dashboard`, `/history` and so on — which are
+correct when the binary serves the page. On static hosting the same paths are
+redirects, defined in `vercel.json`:
+
+```json
+{ "source": "/dashboard", "destination": "https://.../dashboard", "permanent": false }
 ```
 
-Leave them unreplaced and the Get Started buttons go nowhere, which is worse
-than pointing at a holding page.
+Point them wherever the app is actually running. They are temporary redirects
+on purpose: the app URL will move, and a browser that cached a 301 to a dead
+Cloud Run revision is a bad afternoon.
+
+This replaced a `{{APP_URL}}` placeholder that a documented `sed` step was
+supposed to substitute before every deploy. Nothing ever ran it, so the live
+Get Started buttons linked to a literal `{{APP_URL}}/dashboard`. A manual step
+that is only needed at deploy time is a step that gets skipped at deploy time.

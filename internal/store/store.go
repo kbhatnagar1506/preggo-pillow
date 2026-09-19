@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // pure-Go driver: no cgo, so it cross-compiles to the Pi
@@ -63,7 +64,22 @@ CREATE TABLE IF NOT EXISTS nights (
 `
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	// WAL lets a reader and a writer coexist; busy_timeout makes everyone
+	// else wait rather than fail instantly. SQLite's default timeout is zero,
+	// so the seeding of the first night and the auth store's migration raced
+	// on a cold database and whichever lost got SQLITE_BUSY. On a container
+	// that started auth-less; see the fatal in cmd/lull for why that matters.
+	dsn := path
+	if !strings.HasPrefix(dsn, "file:") {
+		dsn = "file:" + dsn
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	dsn += sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}

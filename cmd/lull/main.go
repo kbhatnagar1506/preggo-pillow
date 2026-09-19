@@ -48,7 +48,7 @@ import (
 
 func main() {
 	var (
-		addr     = flag.String("addr", ":8080", "listen address")
+		addr     = flag.String("addr", defaultAddr(), "listen address")
 		dbPath   = flag.String("db", "data/lull.db", "sqlite path")
 		source   = flag.String("source", "sim", "sensor source: sim | serial | phone | i2c")
 		seed     = flag.Bool("seed", true, "seed a simulated 14-night baseline if empty")
@@ -358,8 +358,16 @@ func main() {
 			AppBaseURL:   firstNonEmpty(os.Getenv("APP_BASE_URL"), "http://localhost"+*addr),
 		}
 		sessions, serr := auth.NewStore(st.DB())
+		if serr != nil && cfg.Enabled() {
+			// Auth0 is configured, so someone intends these pages to be
+			// closed. Carrying on would serve the whole record — /report
+			// included — to anyone who can reach the port, with one log line
+			// as the only warning. Refusing to start is the safer failure.
+			log.Fatalf("auth: sign-in is configured but the session store failed: %v\n"+
+				"Refusing to start rather than serve the record with no authentication.", serr)
+		}
 		if serr != nil {
-			log.Printf("auth: session store unavailable: %v", serr)
+			log.Printf("auth: session store unavailable, pages stay open: %v", serr)
 		} else {
 			authSvc = &auth.Service{
 				Provider:      auth.NewProvider(cfg),
@@ -844,6 +852,16 @@ func parsePhones(spec string) ([]sensor.Phone, error) {
 
 // firstNonEmpty returns the first non-blank value, so a flag beats an env var
 // and an env var beats nothing.
+// defaultAddr honours $PORT, which is how every container platform tells a
+// process where to listen — Cloud Run assigns it at start and will not route
+// traffic to a process listening anywhere else. An explicit -addr still wins.
+func defaultAddr() string {
+	if p := os.Getenv("PORT"); p != "" {
+		return ":" + p
+	}
+	return ":8080"
+}
+
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
 		if s := strings.TrimSpace(v); s != "" {

@@ -197,12 +197,21 @@ func TestStandaloneSiteCopy(t *testing.T) {
 	if err != nil {
 		t.Skip("no standalone site directory")
 	}
-	site := string(b)
-	if !strings.Contains(site, "{{APP_URL}}") {
-		t.Error("the standalone copy should template its app links, not hard-code localhost")
+	embedded, err := os.ReadFile("../../web/static/index.html")
+	if err != nil {
+		t.Fatalf("read embedded landing page: %v", err)
 	}
-	if !strings.Contains(site, "Your Comfort,") {
-		t.Error("the standalone copy has drifted from the embedded landing page")
+	// Byte-identical, deliberately. The standalone copy used to carry
+	// {{APP_URL}} placeholders that a documented sed step was supposed to
+	// replace before deploying; nothing ever ran it, so the live Get Started
+	// buttons pointed at a literal "{{APP_URL}}/dashboard". Where the app
+	// lives is deployment configuration and now lives in site/vercel.json as
+	// redirects, leaving one file with one set of links.
+	if string(b) != string(embedded) {
+		t.Error("site/index.html has drifted from web/static/index.html; regenerate it with `make site`")
+	}
+	if strings.Contains(string(b), "{{") {
+		t.Error("the standalone copy still carries an unsubstituted template placeholder")
 	}
 }
 

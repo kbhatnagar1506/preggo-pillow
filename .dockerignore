@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.example
+bin/
+data/
+nights/
+*.log
+site/
+docs/
+arduino/
+tools/

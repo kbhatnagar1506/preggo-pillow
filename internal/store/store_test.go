@@ -1,7 +1,9 @@
 package store
 
 import (
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -410,5 +412,41 @@ func mustPress(t *testing.T, s *Store, at time.Time) {
 	t.Helper()
 	if err := s.InsertPress(at, "judge"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The bug this pins: on a cold database the first night's seeding and the auth
+// store's migration raced, SQLite's default busy timeout is zero, and whoever
+// lost got SQLITE_BUSY. On Cloud Run the loser was authentication, which then
+// disabled itself and served every page open with one log line as the warning.
+func TestConcurrentWritersDoNotGetSqliteBusy(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "race.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer s.Close()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 64)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			for j := 0; j < 8; j++ {
+				if err := s.InsertPress(time.Now(), "race"); err != nil {
+					errs <- err
+					return
+				}
+				if err := s.UpsertNight(fmt.Sprintf("2026-01-%02d", n+1), j, true); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent write failed: %v", err)
 	}
 }

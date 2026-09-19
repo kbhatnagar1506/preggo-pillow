@@ -6,15 +6,64 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
       ]
     },
     {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/dashboard",
+      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/dashboard",
+      "permanent": false
+    },
+    {
+      "source": "/history",
+      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/history",
+      "permanent": false
+    },
+    {
+      "source": "/healthcare",
+      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/healthcare",
+      "permanent": false
+    },
+    {
+      "source": "/medications",
+      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/medications",
+      "permanent": false
+    },
+    {
+      "source": "/settings",
+      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/settings",
+      "permanent": false
+    },
+    {
+      "source": "/report",
+      "destination": "https://preggo-pillow-ifphryzggq-uc.a.run.app/report",
+      "permanent": false
     }
   ]
 }
