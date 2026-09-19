@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -410,9 +411,17 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// Bind BEFORE announcing. ListenAndServe logs success then fails, so a
+	// port already in use prints "listening on :8080" immediately followed by
+	// the error — and anyone reading the top of the log believes it started.
+	ln, lerr := net.Listen("tcp", *addr)
+	if lerr != nil {
+		log.Fatalf("cannot listen on %s: %v\n\nSomething else is already using that port. Find it with:\n  lsof -nP -iTCP%s -sTCP:LISTEN", *addr, lerr, *addr)
+	}
+	log.Printf("lull listening on http://localhost%s", *addr)
+
 	go func() {
-		log.Printf("lull listening on http://localhost%s", *addr)
-		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("http: %v", err)
 		}
 	}()
