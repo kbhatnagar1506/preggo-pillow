@@ -2,6 +2,7 @@ package tiger
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -96,3 +97,62 @@ func TestIsAlreadyExists(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// The schema encodes decisions that are invisible at a glance and trivial to
+// erase with a well-meaning edit. These assert them without needing a database.
+func TestMigrationBucketsNightsFromNoon(t *testing.T) {
+	sql := strings.Join(MigrationStatements(), "\n")
+
+	// THE decision. Sleep crosses midnight, so a midnight-aligned bucket cuts
+	// every night in half and the baseline becomes meaningless. Noon-to-noon
+	// keeps one night in one bucket.
+	if !strings.Contains(sql, "origin => TIMESTAMPTZ '2000-01-01 12:00:00+00'") {
+		t.Error("the nightly aggregate is no longer bucketed from noon; a midnight " +
+			"boundary splits every night across two buckets")
+	}
+	if !strings.Contains(sql, "time_bucket(INTERVAL '1 day'") {
+		t.Error("nightly bucket is not one day")
+	}
+}
+
+func TestMigrationCreatesTheExpectedShape(t *testing.T) {
+	sql := strings.Join(MigrationStatements(), "\n")
+	for _, tbl := range []string{"lull_detections", "lull_commands", "lull_presses", "lull_maternal"} {
+		if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS "+tbl) {
+			t.Errorf("missing table %s", tbl)
+		}
+		if !strings.Contains(sql, "create_hypertable('"+tbl+"'") {
+			t.Errorf("%s is not a hypertable, so it gets none of Timescale's benefit", tbl)
+		}
+	}
+	if !strings.Contains(sql, "timescaledb.continuous") {
+		t.Error("the nightly rollup is not a continuous aggregate")
+	}
+}
+
+// commands, detections and presses must stay separate all the way into
+// Timescale. Merging them there would undo the guarantee the whole demo rests
+// on: that the count cannot be inflated by pressing buttons.
+func TestMigrationKeepsTheThreeRecordsSeparate(t *testing.T) {
+	sql := strings.Join(MigrationStatements(), "\n")
+	if !strings.Contains(sql, "FROM lull_detections") {
+		t.Error("the nightly count must be built from detections")
+	}
+	for _, wrong := range []string{"FROM lull_commands", "FROM lull_presses"} {
+		if strings.Contains(sql, "lull_nightly") && strings.Contains(sql, wrong) {
+			t.Errorf("the nightly aggregate reads %s; the count must come from detections only", wrong)
+		}
+	}
+}
+
+func TestMigrationIsRerunnable(t *testing.T) {
+	for _, q := range MigrationStatements() {
+		if strings.HasPrefix(strings.TrimSpace(q), "CREATE TABLE") &&
+			!strings.Contains(q, "IF NOT EXISTS") {
+			t.Errorf("not re-runnable, will fail on a second start: %.50s", q)
+		}
+		if strings.Contains(q, "create_hypertable") && !strings.Contains(q, "if_not_exists=>TRUE") {
+			t.Errorf("hypertable creation is not idempotent: %.60s", q)
+		}
+	}
+}

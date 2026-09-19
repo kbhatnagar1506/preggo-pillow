@@ -103,8 +103,8 @@ func (s *Store) Close() {
 }
 
 // migrate is idempotent so it can run on every boot.
-func (s *Store) migrate(ctx context.Context) error {
-	stmts := []string{
+func migrationSQL() []string {
+	return []string{
 		`CREATE TABLE IF NOT EXISTS lull_detections (
 			t          timestamptz      NOT NULL,
 			device     text             NOT NULL,
@@ -150,6 +150,16 @@ func (s *Store) migrate(ctx context.Context) error {
 		 GROUP BY device, night
 		 WITH NO DATA`,
 	}
+}
+
+// MigrationStatements is the schema, exported so it can be asserted on without
+// a live database. The design decisions encoded in this SQL — noon-to-noon
+// buckets above all — are invisible at a glance and easy to erase with a
+// well-meaning edit.
+func MigrationStatements() []string { return migrationSQL() }
+
+func (s *Store) migrate(ctx context.Context) error {
+	stmts := migrationSQL()
 
 	for _, q := range stmts {
 		if _, err := s.pool.Exec(ctx, q); err != nil {
