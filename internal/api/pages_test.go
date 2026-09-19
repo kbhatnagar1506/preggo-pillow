@@ -116,11 +116,13 @@ func TestNavPagesAreGatedWhenAuthIsConfigured(t *testing.T) {
 }
 
 func TestMaskNumberShowsEnoughToRecogniseAndNoMore(t *testing.T) {
-	got := maskNumber("+1 (404) 429-2188")
-	if !strings.HasSuffix(got, "88") || !strings.HasPrefix(got, "+1") {
+	// 555-01xx is the block reserved for documentation, so no real number
+	// ever lands in this repository.
+	got := maskNumber("+1 (555) 555-0123")
+	if !strings.HasSuffix(got, "23") || !strings.HasPrefix(got, "+1") {
 		t.Errorf("maskNumber = %q; want the country code and the last two digits", got)
 	}
-	if strings.Contains(got, "4042") {
+	if strings.Contains(got, "5550") {
 		t.Errorf("maskNumber = %q; it is still readable over a shoulder", got)
 	}
 	if maskNumber("") != "" {
