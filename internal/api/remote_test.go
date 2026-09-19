@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -108,5 +110,89 @@ func TestNoRemoteWhenOwnerUnset(t *testing.T) {
 	s.Routes().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/krishnabhatnagar", nil))
 	if rr.Code == http.StatusOK && strings.Contains(rr.Body.String(), "Lull &middot; remote") {
 		t.Error("the remote should not be served when no owner is configured")
+	}
+}
+
+// The landing page is "/" and the dashboard moved to "/dashboard". Getting this
+// wrong means a judge opening the URL lands on an operator console instead of
+// the product.
+func TestLandingAndDashboardRoutes(t *testing.T) {
+	s := &Server{Hub: NewHub(), Web: http.Dir("../../web/static"), Owner: "krishnabhatnagar"}
+	mux := s.Routes()
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/ -> %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Preggo Pillow") {
+		t.Error("/ should serve the landing page")
+	}
+	if strings.Contains(rr.Body.String(), "api/stream") {
+		t.Error("/ is serving the dashboard, not the landing page")
+	}
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/dashboard -> %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "api/stream") {
+		t.Error("/dashboard should serve the operator dashboard")
+	}
+}
+
+func TestDashboardWithoutAssetsFailsCleanly(t *testing.T) {
+	s := &Server{Hub: NewHub()}
+	rr := httptest.NewRecorder()
+	s.Routes().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("no assets -> %d, want 503 rather than a panic", rr.Code)
+	}
+}
+
+// Every link the landing page offers must resolve, or Get Started is a dead end
+// in front of a judge.
+func TestLandingLinksResolve(t *testing.T) {
+	b, err := os.ReadFile("../../web/static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+	s := &Server{Hub: NewHub(), Web: http.Dir("../../web/static"), Owner: "krishnabhatnagar"}
+	mux := s.Routes()
+
+	re := regexp.MustCompile(`href="(/[^"#]*)"`)
+	seen := map[string]bool{}
+	for _, m := range re.FindAllStringSubmatch(page, -1) {
+		href := m[1]
+		if seen[href] {
+			continue
+		}
+		seen[href] = true
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, href, nil))
+		if rr.Code != http.StatusOK {
+			t.Errorf("landing page links to %s which returns %d", href, rr.Code)
+		}
+	}
+	if len(seen) == 0 {
+		t.Error("no internal links found; the CTAs are probably broken")
+	}
+}
+
+// The standalone Vercel copy must not ship unreplaced placeholders, and must
+// stay in step with the embedded one.
+func TestStandaloneSiteCopy(t *testing.T) {
+	b, err := os.ReadFile("../../site/index.html")
+	if err != nil {
+		t.Skip("no standalone site directory")
+	}
+	site := string(b)
+	if !strings.Contains(site, "{{APP_URL}}") {
+		t.Error("the standalone copy should template its app links, not hard-code localhost")
+	}
+	if !strings.Contains(site, "Your Comfort,") {
+		t.Error("the standalone copy has drifted from the embedded landing page")
 	}
 }

@@ -8,6 +8,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -129,6 +130,9 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/appointment", s.handleAppointment)
 	mux.HandleFunc("/api/ask", s.handleAsk)
 	mux.HandleFunc("/api/call", s.handleCall)
+	// The landing page is "/", so the dashboard needs its own path. Serving
+	// dashboard.html under a clean URL rather than exposing the file name.
+	mux.HandleFunc("/dashboard", s.handleDashboard)
 	// The phone remote lives at the owner's own path. Single user by design:
 	// Lull monitors one pregnancy, and a bedside device does not need accounts.
 	if s.Owner != "" {
@@ -317,4 +321,21 @@ func consecutiveLow(nights []store.Night, baseline float64, n int) bool {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// handleDashboard serves the operator dashboard at a clean path, so "/" can be
+// the landing page.
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if s.Web == nil {
+		http.Error(w, "dashboard assets not mounted", http.StatusServiceUnavailable)
+		return
+	}
+	f, err := s.Web.Open("dashboard.html")
+	if err != nil {
+		http.Error(w, "dashboard not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = io.Copy(w, f)
 }

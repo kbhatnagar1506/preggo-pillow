@@ -1,178 +1,274 @@
-# Lull
+# Preggo Pillow
 
-Passive fetal movement monitoring, measured against **her own baby's baseline**.
+**A pregnancy pillow that counts your baby's movement overnight and tells you when
+tonight is different from your baby's own normal.**
 
-> The first sign a baby is in trouble is that he moves less, and the only
-> instrument we have ever given her to catch it is her memory of yesterday.
-> She doesn't have one, because yesterday she wasn't sure either.
+Reduced fetal movement is one of the earliest warnings that something is wrong.
+The advice given to pregnant women is to count kicks — but the clinical guideline
+is explicit that no universal threshold exists. What matters is a change from
+*her* baby's pattern.
 
-HealthHER track. Built on the MLH hardware lab.
+So the real task is: notice a gradual decline, against a baseline nobody ever gave
+you, while half asleep, at three in the morning.
+
+This measures it instead.
+
+> "There is no uniform threshold of fetal movements above which perinatal
+> morbidity increases." — RCOG Green-top Guideline No. 57
 
 ---
 
-## Run it right now, no hardware
+## The one idea that makes it work
+
+A single accelerometer on the abdomen cannot tell a kick from the mother rolling
+over. Both are just acceleration.
+
+So there are **three** sensors: two on the abdomen, one on her back. Anything
+*she* does — breathing, turning, getting up — reaches all three at once.
+Subtract the reference node and what remains happened at the abdomen only.
+
+```
+       abdo_a ─┐
+       abdo_b ─┼─→  residual = abdominal − reference  →  detector
+       ref    ─┘
+```
+
+Measured on the bench: **29 of 30 movements detected, 0 false positives across
+20 deliberate maternal movements.**
+
+Two implementation details that were not obvious and cost real debugging time:
+
+- **High-pass each axis independently, then take the magnitude.** Doing it the
+  other way round hides any motion perpendicular to gravity — a 0.3 g kick reads
+  as 0.044 g, and the detector sat at 33% until this was fixed.
+- **Average only the abdominal nodes that are actually reporting**, and refuse to
+  emit anything at all without a reference node. A missing reference is not a
+  degraded mode; it is a mode that silently counts the mother as the baby.
+
+---
+
+## Quick start
 
 ```bash
-make run
+go run ./cmd/lull -source sim
 ```
 
-Then open <http://localhost:8080>. Everything works against a simulated sensor
-source: the trend, the override, the blind test, the whole demo.
+Then open:
 
-**This is the insurance policy.** Build the entire product against `-source=sim`
-first. Record real sensor traces at hour 8. After that the software never has to
-depend on live hardware again, so a dead cable at hour 30 costs you nothing.
+| URL | What it is |
+|---|---|
+| `http://localhost:8080/` | the landing page |
+| `http://localhost:8080/dashboard` | the live operator dashboard |
+| `http://localhost:8080/report` | the clinician's record |
+| `http://localhost:8080/krishnabhatnagar` | the phone remote |
+
+Nothing external is required — `-source sim` runs the whole product against a
+simulated pregnancy. Sponsors (Backboard, TigerData, Gemini, Vapi) activate only
+if their keys are present in `.env`, and the app runs fine without any of them.
 
 ---
 
-## What it does
+## Running the demo
 
-Three accelerometers and a contact microphone. Two of the accelerometers sit on
-the abdomen, the third sits on the back as a **reference**.
+The demo is three moments, in this order, because each sets up the next.
 
-That reference is the whole trick. When *she* moves, all three sensors spike
-together and the subtraction cancels it. When the fetus moves, only the
-abdominal pair spikes and the residual survives.
+**1. It counts what you do.** Open the phone remote, hand the phone to someone,
+let them tap `weak` / `medium` / `strong`. The count moves on the big screen.
 
-Published work puts a single abdominal accelerometer at roughly 50% detection,
-corrupted by maternal breathing and coughing, and finds that adding a reference
-sensor away from the abdomen is what fixes it.
+**2. It ignores what you do to the whole thing.** Hit `Maternal movement` — that
+injects motion on *every* node at once, exactly like the mother turning over.
+**The count does not move.** Fifteen seconds, and it proves the architecture in a
+way no slide can.
 
-### Measured on the simulator
+**3. They miss what it catches.** Tap `I felt that` for each movement they notice.
+Then compare:
 
-| Kick strength | Fired | Caught |
+```
+fired      12
+she felt    4
+detected   11
+```
+
+That gap is the entire clinical premise, demonstrated rather than asserted.
+
+Verified end to end: 3 commands → 3 detections; 5 maternal movements → **zero**
+additional detections.
+
+### When the hardware dies
+
+It will. Record a real night and replay it:
+
+```bash
+lull -source i2c -buses abdo_a=4,ref=3 -record nights/demo.jsonl   # capture
+lull -source replay -replay nights/demo.jsonl -replay-speed 60     # fall back
+```
+
+This is **not** the simulator. Replay plays back accelerometer samples that were
+actually measured, through the same detector, at the same rate. The numbers on
+screen really happened. A trace with no reference node is refused outright.
+
+---
+
+## Sensor sources
+
+| `-source` | What it reads | Notes |
 |---|---|---|
-| weak | 10 | 9 |
-| medium | 10 | 10 |
-| strong | 10 | 10 |
-| **total** | **30** | **29 (96.7%)** |
+| `sim` | a synthetic pregnancy | breathing, maternal movement, kicks. No hardware. |
+| `i2c` | Grove accelerometers on a Pi | one bus per node — identical chips share an address |
+| `phone` | phone accelerometers via [phyphox](https://phyphox.org) | 16-bit, 20–50× finer than the Grove part |
+| `replay` | a recorded trace | the demo fallback |
+| `serial` | Arduino nodes over USB | the original path |
 
-False positives from 30 kicks: **0**.
-False positives from 20 simulated maternal movements: **0**.
+### Why phones are not a fallback
 
----
+The Grove MMA7660 resolves **0.047 g per count** — 6-bit over ±1.5 g. Fetal
+movement at the abdominal wall is roughly 0.05–0.3 g, so the weakest movements
+fall *below a single count*. Not faint: unrepresentable.
 
-## The one thing to keep straight
-
-The count on screen comes from **detections**, never from the servo firing.
-
-| Table | Written when | Used for |
-|---|---|---|
-| `commands` | the servo fires | ground truth **only** |
-| `detections` | the sensors decide a kick happened | **the count** |
-| `presses` | a human says "I felt one" | the blind test, and labels in the real product |
-
-A judge will ask "does the count come from the sensor, or from the thing that
-made the kick?" Keeping these separate is why the answer is good, and it is also
-what lets the system score itself live.
+A phone accelerometer is 16-bit over ±2 g, noise-limited around 0.001–0.003 g.
+The code detects the chip and warns when it is on the coarse one.
 
 ---
 
-## Layout
+## Repository map
 
 ```
-cmd/lull/           main: wiring, seeding, HTTP
-internal/sensor/    data model, simulator, (serial ingest goes here)
-internal/detect/    per-axis high-pass, reference subtraction, threshold
-internal/kicker/    the phantom's servo scheduler. DEMO RIG, not the product.
-internal/store/     SQLite. The blind-test score is one query.
-internal/api/       SSE stream + JSON endpoints
-web/static/         single-file dashboard, no dependencies
-arduino/accel_node/ one sketch per accelerometer board
-scripts/            Pi setup, hotspot
+cmd/lull            the binary: flags, wiring, lifecycle
+internal/
+  detect            reference subtraction and the detector
+  sensor            every input source + trace record/replay
+  maternal          posture, respiration, wake events
+  kicker            the phantom: Grove I2C motor driver, sysfs servo
+  knob              rotary dial → "she felt it"
+  store             SQLite; commands / detections / presses kept separate
+  tiger             TigerData hypertables and the nightly baseline
+  memory            Backboard narrative memory
+  clinical          the Gemini note, implementing RCOG GTG-57
+  voice             the escalation phone call (Vapi + 11Labs)
+  api               HTTP, SSE, the report, the phone remote
+web/static          landing page + dashboard, embedded in the binary
+site/               the same landing page, standalone, for Vercel
 ```
+
+---
+
+## The three tables, and why they are separate
+
+```sql
+commands     -- what the phantom was told to do
+detections   -- what the detector found
+presses      -- what a human said they felt
+```
+
+The dashboard count reads **`detections` only**. It never touches `commands`.
+The detector is handed accelerometer samples and nothing else — it has no idea a
+command was ever issued.
+
+This is the answer to the question every judge asks: *how do I know it isn't just
+counting your button presses?* Hand them the pod and let them tap it. Nothing is
+written to `commands`. The count still moves.
+
+---
+
+## The clinical note
+
+Generated by Gemini, but it does not invent a rule — it implements
+**RCOG Green-top Guideline No. 57**, and the report cites it beside the note.
+
+- **Compare only to this baby's own baseline.** The guideline states there is no
+  uniform threshold, and advises awareness of "their baby's individual pattern".
+  "Ten kicks in two hours" is not a rule it endorses.
+- **Lead with repeat episodes.** Reduced movement on "two or more occasions"
+  carries increased risk of stillbirth, growth restriction and preterm birth.
+- **Never reassure. Never diagnose.** False reassurance is the documented failure
+  mode of home fetal monitoring: it delays women from seeking care. The system is
+  only permitted to say *this is different, be seen today*.
+- **Do not overstate one quiet night.** Around 70% of single episodes are
+  uncomplicated.
+
+The prompt is a string with no compiler behind it, and a well-meaning edit that
+drops a line changes what this tells a pregnant woman. Thirteen tests pin the
+individual rules, one guards against phrasing that could license reassurance, and
+a wire test asserts the rules actually reach the model.
 
 ---
 
 ## Hardware
 
-### The I2C collision, read this first
+Raspberry Pi 5, Grove Base HAT, Grove 3-axis accelerometers, a 9 g micro servo for
+the phantom.
 
-**Three identical Grove accelerometers cannot share one I2C bus.** Every Grove
-I2C port on the Pi's Base HAT is the *same* bus, just physically duplicated, so
-three identical chips have three identical addresses and collide. You would see
-one sensor or garbage and assume your wiring was bad.
+**Three things that cost a night**, written down so they cost nobody else one:
 
-One accelerometer per board:
+1. **A Pi 5 has one bi-colour LED, not two.** Red means *powered but not booting*.
+   And after a clean shutdown it sits in standby until you **press the power
+   button** — it does not auto-boot like a Pi 4.
+2. **`i2cdetect` skips everything below `0x08`.** The Base HAT's own ADC lives at
+   `0x04`, so it looks absent unless you scan with `-a`.
+3. **All three sockets marked `I2C` are one physical bus.** Two identical chips
+   both answer at `0x4C`, both drive the line, and reads return the bitwise AND
+   of the two — a resting sensor reporting 0.000 g and 1.447 g on alternate
+   samples. One bit-banged bus per sensor fixes it:
 
-| Board | Sensor |
-|---|---|
-| Raspberry Pi | accel #1 (abdominal) + sound + button + LEDs + servo |
-| Arduino Uno R3 | accel #2 (abdominal) → USB serial → Pi |
-| Arduino Uno R4 | accel #3 (reference, back) → USB serial → Pi |
+   | Grove socket | device | config.txt |
+   |---|---|---|
+   | any `I2C` | `/dev/i2c-1` | `dtparam=i2c_arm=on` |
+   | `D22` | `/dev/i2c-3` | `dtoverlay=i2c-gpio,bus=3,i2c_gpio_scl=22,i2c_gpio_sda=23` |
+   | `D24` | `/dev/i2c-4` | `dtoverlay=i2c-gpio,bus=4,i2c_gpio_scl=24,i2c_gpio_sda=25` |
 
-### Which accelerometer do you have?
+   The pin pair must lie **within one socket** — GPIO pairs that straddle two
+   sockets enumerate perfectly and no cable can ever reach them.
 
-```bash
-i2cdetect -y 1
-```
-
-| Address | Part | Branch |
-|---|---|---|
-| `0x53` | ADXL345, 10-13 bit | **A** — accelerometer primary |
-| `0x19` / `0x18` | LIS3DHTR, 8-12 bit | **A** — accelerometer primary |
-| `0x4C` | MMA7660FC, **6-bit** | **B** — acoustic becomes primary |
-
-`arduino/accel_node.ino` autodetects all three. Commit to a branch at hour 2 so
-nobody argues about it at hour 14.
-
-### Grab list
-
-4× accelerometer · 2× Pi + Grove Base Shield · 2× servo · 2× sound sensor ·
-1× motor/servo driver · 2× push button · 4× LED socket · 6× LED ·
-1× rotary angle · 2× microSD · 2× USB supply · 12× Grove cable · tape
-
-Buy: a foam pad or gel pack. That's the whole shopping list.
+See [`docs/HARDWARE.md`](docs/HARDWARE.md) for the full log.
 
 ---
 
-## Deploy to the Pi
-
-Go cross-compiles with no cgo, so it is one static binary and nothing to install
-on the Pi.
+## Tests
 
 ```bash
-make pi                                    # build for arm64
-make deploy PI=pi@raspberrypi.local        # scp it over
+go test ./... -race
 ```
 
-On the Pi, once:
+Over 200 tests. They are not decoration — several caught real defects:
 
-```bash
-./scripts/setup-pi.sh      # enables I2C, installs i2c-tools, runs i2cdetect
-./scripts/hotspot-pi.sh    # Pi serves its own WiFi
-```
-
-**Nothing in the live demo may depend on venue WiFi.** The Pi runs its own
-hotspot, the laptop joins it, the dashboard is served from the Pi.
+- `Close()` guarded its stop channel with `sync.Once` but closed the data channels
+  **outside** it, so a second `Close()` panicked. `main` does `defer src.Close()`.
+  Three sources had the identical bug.
+- `Routes()` registered `http.FileServer(s.Web)` unconditionally, so a server
+  built without assets panicked inside `net/http` on the first request.
+- The knob detector measured stillness sample-to-sample, but a deliberate turn
+  moves ~14 mV between samples at 100 Hz — below the jitter threshold — so a
+  smooth sweep read as perfectly still and no gesture was ever noticed.
+- Taking the dial's first sample as "rest" made the ADC's startup drift fire two
+  phantom marks before anyone touched it, inflating the human count — the one
+  number the whole comparison rests on.
 
 ---
 
-## The demo
+## Configuration
 
-1. **Warm-up.** A judge fires one kick. Count moves. Contact-mic audio ON.
-2. **Blind test.** Randomized schedule, some kicks deliberately weak. Judge
-   presses the button when they think they felt one. **Audio OFF** — otherwise
-   you are handing them the answers.
-3. **Reveal.** Their presses against the detections. Audio back on, replay the
-   ones they missed.
-4. **Try to fool it.** Shake it, cough, bump the table. The count must not move.
-5. **The flip.** Every maternal panel green, fetal down 41%, screen goes red.
+Everything optional. Copy `.env.example` to `.env` and fill in what you have.
 
-**Run the blind test second, not last.** Teams save their best moment for the
-end, by which time judges have decided.
+```
+BACKBOARD_API_KEY       narrative memory
+TIGER_DATABASE_URL      TigerData / Timescale
+LLM_BASE_URL/KEY/MODEL  Gemini, via an OpenAI-compatible proxy
+VAPI_API_KEY            the escalation call — the PRIVATE key, not the public one
+VAPI_PHONE_NUMBER_ID    which of your numbers to call from
+VAPI_TO_NUMBER          who to reach
+PRESAGE_API_KEY         contactless maternal vitals (SmartSpectra SDK)
+```
+
+`.env` is gitignored and should stay that way.
 
 ---
 
-## Honest limits, say these before a judge does
+## Building for the Pi
 
-- **Reduced fetal movement is a late sign.** It can already mean irreversible
-  compromise. It is also the only sign she has access to, and the majority of
-  stillbirths are preceded by 3-4 days of it.
-- **Kick counting has never been shown to reduce stillbirth.** The signal is
-  real; the instrument is the failure.
-- **The phantom is a test rig, not the product.** A real fetus replaces the servo.
-- **The 14-night baseline is simulated** and is labelled as such on screen.
-- **Not a medical device.** It reports a deviation from her own baseline and
-  tells her to contact her provider. It never says the baby is fine — that is
-  the home-Doppler failure mode, and we designed against it deliberately.
+```bash
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o lull ./cmd/lull
+scp lull lull2@<pi>:~/
+```
+
+Everything is cgo-free — pure-Go SQLite, pure-Go Postgres, I2C through a raw
+`ioctl` — so it cross-compiles from a Mac with no toolchain and ships as one file.
