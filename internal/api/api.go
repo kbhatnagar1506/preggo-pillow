@@ -18,6 +18,7 @@ import (
 	"github.com/kbhatnagar1506/lull/internal/kicker"
 	"github.com/kbhatnagar1506/lull/internal/memory"
 	"github.com/kbhatnagar1506/lull/internal/store"
+	"github.com/kbhatnagar1506/lull/internal/vitals"
 	"github.com/kbhatnagar1506/lull/internal/voice"
 )
 
@@ -70,6 +71,10 @@ type Server struct {
 	Hub    *Hub
 	Store  *store.Store
 	Kicker *kicker.Kicker
+
+	// Vitals holds contactless maternal pulse and breathing. Nil simply
+	// reports the capability as unavailable.
+	Vitals *vitals.Store
 
 	// Voice places the escalation call. Nil or unconfigured simply disables
 	// the button; it must never stop the dashboard from serving.
@@ -130,6 +135,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/appointment", s.handleAppointment)
 	mux.HandleFunc("/api/ask", s.handleAsk)
 	mux.HandleFunc("/api/call", s.handleCall)
+	mux.HandleFunc("/api/vitals", s.handleVitals)
 	// The landing page is "/", so the dashboard needs its own path. Serving
 	// dashboard.html under a clean URL rather than exposing the file name.
 	mux.HandleFunc("/dashboard", s.handleDashboard)

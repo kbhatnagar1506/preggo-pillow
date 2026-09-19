@@ -36,6 +36,7 @@ import (
 	"github.com/kbhatnagar1506/lull/internal/sensor"
 	"github.com/kbhatnagar1506/lull/internal/store"
 	"github.com/kbhatnagar1506/lull/internal/tiger"
+	"github.com/kbhatnagar1506/lull/internal/vitals"
 	"github.com/kbhatnagar1506/lull/internal/voice"
 	"github.com/kbhatnagar1506/lull/web"
 )
@@ -349,9 +350,14 @@ func main() {
 		log.Printf("phone remote: http://localhost%s/%s", *addr, *owner)
 	}
 
+	// Maternal vitals: the control arm of the argument. Fed by the Presage
+	// bridge, or by anything else that can POST /api/vitals.
+	vitalStore := vitals.NewStore(2048)
+
 	srv := &api.Server{
 		Hub:      hub,
 		Store:    st,
+		Vitals:   vitalStore,
 		Voice:    vc,
 		CallTo:   to,
 		Owner:    *owner,

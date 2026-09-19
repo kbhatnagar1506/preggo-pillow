@@ -1,0 +1,10 @@
+{
+  "name": "lull-presage-bridge",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Runs the Presage SmartSpectra SDK against a camera and posts maternal vitals to Lull",
+  "scripts": { "start": "node bridge.mjs" },
+  "dependencies": { "@smartspectra/node-sdk": "^3.3.0" },
+  "engines": { "node": ">=20" }
+}
