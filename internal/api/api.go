@@ -17,6 +17,7 @@ import (
 	"github.com/kbhatnagar1506/lull/internal/kicker"
 	"github.com/kbhatnagar1506/lull/internal/memory"
 	"github.com/kbhatnagar1506/lull/internal/store"
+	"github.com/kbhatnagar1506/lull/internal/voice"
 )
 
 // Event is anything pushed to the browser.
@@ -68,7 +69,15 @@ type Server struct {
 	Hub    *Hub
 	Store  *store.Store
 	Kicker *kicker.Kicker
-	Web    http.FileSystem
+
+	// Voice places the escalation call. Nil or unconfigured simply disables
+	// the button; it must never stop the dashboard from serving.
+	Voice *voice.Client
+	// CallTo is the default number to reach. Single user, single number.
+	CallTo string
+	// Owner is the path the phone remote is served at, e.g. "krishnabhatnagar".
+	Owner string
+	Web   http.FileSystem
 
 	// Memory and Recorder are the narrative half of the product. Both are safe
 	// when nil: Lull works identically without them.
@@ -95,7 +104,15 @@ type Server struct {
 
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(s.Web))
+	// A nil Web panics inside net/http on the first request, taking the whole
+	// server down rather than failing one route. Guard it.
+	if s.Web != nil {
+		mux.Handle("/", http.FileServer(s.Web))
+	} else {
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "dashboard assets not mounted", http.StatusServiceUnavailable)
+		})
+	}
 	mux.HandleFunc("/api/stream", s.handleStream)
 	mux.HandleFunc("/api/press", s.handlePress)
 	mux.HandleFunc("/api/kick", s.handleKick)
@@ -111,6 +128,13 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/profile", s.handleProfile)
 	mux.HandleFunc("/api/appointment", s.handleAppointment)
 	mux.HandleFunc("/api/ask", s.handleAsk)
+	mux.HandleFunc("/api/call", s.handleCall)
+	// The phone remote lives at the owner's own path. Single user by design:
+	// Lull monitors one pregnancy, and a bedside device does not need accounts.
+	if s.Owner != "" {
+		mux.HandleFunc("/"+s.Owner, s.handleRemote)
+		mux.HandleFunc("/"+s.Owner+"/", s.handleRemote)
+	}
 	return mux
 }
 

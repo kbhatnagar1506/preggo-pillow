@@ -36,6 +36,7 @@ import (
 	"github.com/kbhatnagar1506/lull/internal/sensor"
 	"github.com/kbhatnagar1506/lull/internal/store"
 	"github.com/kbhatnagar1506/lull/internal/tiger"
+	"github.com/kbhatnagar1506/lull/internal/voice"
 	"github.com/kbhatnagar1506/lull/web"
 )
 
@@ -50,6 +51,12 @@ func main() {
 		buses = flag.String("buses", "abdo_a=1,abdo_b=3,ref=4",
 			"accelerometer I2C buses as node=busnumber (one bus each: identical "+
 				"chips share an address and would collide)")
+		owner     = flag.String("owner", "krishnabhatnagar", "path the phone remote is served at, e.g. /krishnabhatnagar")
+		callTo    = flag.String("call-to", "", "number the escalation call reaches; falls back to VAPI_TO_NUMBER")
+		vapiKey   = flag.String("vapi-key", "", "Vapi PRIVATE api key; falls back to VAPI_API_KEY")
+		vapiFrom  = flag.String("vapi-phone-id", "", "Vapi phoneNumberId to call from; falls back to VAPI_PHONE_NUMBER_ID")
+		vapiVoice = flag.String("vapi-voice", "", "11Labs voice id; falls back to VAPI_VOICE_ID")
+
 		replayPath  = flag.String("replay", "", "replay a recorded trace instead of live sensors — the demo fallback")
 		replaySpeed = flag.Float64("replay-speed", 1, "playback speed; 60 puts an hour of night into a minute")
 		replayLoop  = flag.Bool("replay-loop", true, "restart the trace when it ends")
@@ -325,9 +332,29 @@ func main() {
 		log.Fatalf("embed web: %v", err)
 	}
 
+	// Voice escalation. Unconfigured simply hides the capability; it must
+	// never stop the dashboard from serving.
+	vc := voice.New(
+		firstNonEmpty(*vapiKey, os.Getenv("VAPI_API_KEY")),
+		firstNonEmpty(*vapiFrom, os.Getenv("VAPI_PHONE_NUMBER_ID")),
+		firstNonEmpty(*vapiVoice, os.Getenv("VAPI_VOICE_ID")),
+	)
+	to := firstNonEmpty(*callTo, os.Getenv("VAPI_TO_NUMBER"))
+	if vc.Enabled() {
+		log.Printf("voice: Vapi ready, calls go to %s", to)
+	} else {
+		log.Printf("voice: not configured (set VAPI_API_KEY and VAPI_PHONE_NUMBER_ID)")
+	}
+	if *owner != "" {
+		log.Printf("phone remote: http://localhost%s/%s", *addr, *owner)
+	}
+
 	srv := &api.Server{
 		Hub:      hub,
 		Store:    st,
+		Voice:    vc,
+		CallTo:   to,
+		Owner:    *owner,
 		Kicker:   kk,
 		Web:      http.FS(sub),
 		Fool:     fool,
@@ -705,4 +732,15 @@ func parsePhones(spec string) ([]sensor.Phone, error) {
 		return nil, fmt.Errorf("-phones must include at least one abdominal handset (abdo_a or abdo_b)")
 	}
 	return out, nil
+}
+
+// firstNonEmpty returns the first non-blank value, so a flag beats an env var
+// and an env var beats nothing.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
 }
