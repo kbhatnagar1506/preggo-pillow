@@ -141,3 +141,19 @@ func TestSimServoWithNoInjectIsSafe(t *testing.T) {
 		t.Errorf("Kick returned %v, want nil", err)
 	}
 }
+
+// A nil servo is how the phone path is configured: no phantom to drive, a
+// finger on the pod instead. Firing must still record the command rather than
+// panicking on a nil interface.
+func TestFireWithNilServoRecordsWithoutPanicking(t *testing.T) {
+	var got []string
+	k := New(nil, func(_ time.Time, strength string) { got = append(got, strength) })
+	k.Fire(Medium)
+	k.Fire(Weak)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 recorded commands, got %v", got)
+	}
+	if got[0] != Medium || got[1] != Weak {
+		t.Errorf("wrong strengths recorded: %v", got)
+	}
+}

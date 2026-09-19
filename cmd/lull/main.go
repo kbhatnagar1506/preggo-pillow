@@ -43,9 +43,14 @@ func main() {
 	var (
 		addr     = flag.String("addr", ":8080", "listen address")
 		dbPath   = flag.String("db", "data/lull.db", "sqlite path")
-		source   = flag.String("source", "sim", "sensor source: sim | serial")
+		source   = flag.String("source", "sim", "sensor source: sim | serial | phone")
 		seed     = flag.Bool("seed", true, "seed a simulated 14-night baseline if empty")
 		sampleHz = flag.Int("hz", 100, "sensor sample rate (sim only)")
+
+		phones = flag.String("phones", "", "phyphox handsets as node=host pairs, e.g. "+
+			"\"abdo_a=192.168.1.21,abdo_b=192.168.1.22,ref=192.168.1.23\" "+
+			"(iOS serves on port 80, Android on 8080)")
+		phonePollHz = flag.Int("phone-poll-hz", 10, "how often to drain each handset's buffer")
 
 		ports     = flag.String("ports", "auto", "serial devices, comma separated, or \"auto\" to discover")
 		baud      = flag.Int("baud", 115200, "serial baud rate, must match the sketch")
@@ -157,6 +162,28 @@ func main() {
 		// The Grove sound sensor is a 0-1023 analog envelope, so its spike
 		// scale is nothing like the simulator's.
 		defaultAcoustic = 60.0
+
+	case "phone":
+		handsets, err := parsePhones(*phones)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		log.Printf("sensor source: PHONE (phyphox) — %d handsets, polling at %d Hz",
+			len(handsets), *phonePollHz)
+		for _, h := range handsets {
+			log.Printf("  %-7s %s", h.Node, h.BaseURL())
+		}
+		ph := sensor.NewPhoneSource(handsets, *phonePollHz)
+		src = ph
+		// There is no servo on this path and nothing to fake: tap the pod.
+		servo = nil
+		fool = nil
+		// Phones carry no contact mic, so the acoustic gate would veto every
+		// detection. Turn it off rather than silently detecting nothing.
+		if *requireAcoustic {
+			log.Printf("  no contact mic on this path: disabling the acoustic confirmation gate")
+		}
+		*requireAcoustic = false
 
 	default:
 		log.Fatalf("unknown -source %q", *source)
@@ -521,4 +548,57 @@ func seedBaseline(st *store.Store) error {
 	}
 	log.Println("seeded 14 simulated baseline nights (labelled simulated in the UI)")
 	return nil
+}
+
+// parsePhones turns "abdo_a=192.168.1.21,ref=192.168.1.23" into handsets.
+//
+// The node names are the same three the detector already knows about, and at
+// least one abdominal node plus the reference is required — reference
+// subtraction is what makes this work at all, and a run without it would
+// quietly count maternal movement as fetal movement.
+func parsePhones(spec string) ([]sensor.Phone, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return nil, fmt.Errorf("-source phone needs -phones, e.g. " +
+			"-phones \"abdo_a=192.168.1.21,ref=192.168.1.23\"")
+	}
+	valid := map[string]sensor.Node{
+		"abdo_a": sensor.NodeAbdoA,
+		"abdo_b": sensor.NodeAbdoB,
+		"ref":    sensor.NodeRef,
+	}
+	var out []sensor.Phone
+	seen := map[sensor.Node]bool{}
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		name, host, ok := strings.Cut(part, "=")
+		if !ok {
+			return nil, fmt.Errorf("bad -phones entry %q: want node=host", part)
+		}
+		node, ok := valid[strings.ToLower(strings.TrimSpace(name))]
+		if !ok {
+			return nil, fmt.Errorf("bad -phones node %q: want abdo_a, abdo_b or ref", name)
+		}
+		if seen[node] {
+			return nil, fmt.Errorf("-phones lists %q twice", name)
+		}
+		seen[node] = true
+		host = strings.TrimSpace(host)
+		if host == "" {
+			return nil, fmt.Errorf("-phones entry %q has no host", part)
+		}
+		out = append(out, sensor.Phone{Node: node, Host: host})
+	}
+	if !seen[sensor.NodeRef] {
+		return nil, fmt.Errorf("-phones must include a ref handset: without the " +
+			"reference node, maternal movement cannot be subtracted and it would " +
+			"be counted as fetal movement")
+	}
+	if !seen[sensor.NodeAbdoA] && !seen[sensor.NodeAbdoB] {
+		return nil, fmt.Errorf("-phones must include at least one abdominal handset (abdo_a or abdo_b)")
+	}
+	return out, nil
 }

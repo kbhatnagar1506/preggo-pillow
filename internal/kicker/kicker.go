@@ -127,7 +127,13 @@ func (k *Kicker) Fire(strength string) {
 		strength = Medium
 	}
 	now := time.Now()
-	_ = k.servo.Kick(strength, amp)
+	// A nil servo is a legitimate configuration, not a bug: on the phone path
+	// there is no phantom to drive, and a judge taps the pod with a finger
+	// instead. The command is still recorded so the blind-test overlay lines
+	// up, but there is nothing to actuate.
+	if k.servo != nil {
+		_ = k.servo.Kick(strength, amp)
+	}
 	if k.onFire != nil {
 		k.onFire(now, strength)
 	}
