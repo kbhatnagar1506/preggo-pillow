@@ -66,6 +66,21 @@ func (b *Bus) WriteReg(addr, reg, val uint8) error {
 	return err
 }
 
+// Write sends raw bytes to a device, with no register prefix.
+//
+// Needed because not every I2C device is register-addressed. The Grove motor
+// driver takes three-byte commands as a plain write, so WriteReg's
+// register-then-value shape does not fit it.
+func (b *Bus) Write(addr uint8, data []byte) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if err := b.setAddr(addr); err != nil {
+		return err
+	}
+	_, err := b.f.Write(data)
+	return err
+}
+
 // ReadReg reads n bytes starting at reg.
 func (b *Bus) ReadReg(addr, reg uint8, n int) ([]byte, error) {
 	b.mu.Lock()

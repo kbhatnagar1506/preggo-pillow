@@ -43,9 +43,15 @@ func main() {
 	var (
 		addr     = flag.String("addr", ":8080", "listen address")
 		dbPath   = flag.String("db", "data/lull.db", "sqlite path")
-		source   = flag.String("source", "sim", "sensor source: sim | serial | phone")
+		source   = flag.String("source", "sim", "sensor source: sim | serial | phone | i2c")
 		seed     = flag.Bool("seed", true, "seed a simulated 14-night baseline if empty")
 		sampleHz = flag.Int("hz", 100, "sensor sample rate (sim only)")
+
+		buses = flag.String("buses", "abdo_a=1,abdo_b=3,ref=4",
+			"accelerometer I2C buses as node=busnumber (one bus each: identical "+
+				"chips share an address and would collide)")
+		motorBus  = flag.Int("motor-bus", 1, "I2C bus the Grove motor driver is on")
+		motorAddr = flag.Int("motor-addr", 0x0F, "Grove motor driver address (DIP-switch selectable)")
 
 		phones = flag.String("phones", "", "phyphox handsets as node=host pairs, e.g. "+
 			"\"abdo_a=192.168.1.21,abdo_b=192.168.1.22,ref=192.168.1.23\" "+
@@ -162,6 +168,25 @@ func main() {
 		// The Grove sound sensor is a 0-1023 analog envelope, so its spike
 		// scale is nothing like the simulator's.
 		defaultAcoustic = 60.0
+
+	case "i2c":
+		log.Printf("sensor source: I2C on the Pi")
+		s, sv, clean, err := hardwareSource(*buses, *sampleHz, *motorBus, uint8(*motorAddr))
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		src = s
+		servo = sv
+		fool = nil
+		if clean != nil {
+			defer clean()
+		}
+		// No contact mic: the Grove HAT's ADC does not enumerate on a Pi 5, so
+		// leaving the acoustic gate on would veto every detection.
+		if *requireAcoustic {
+			log.Printf("  no contact mic on this path: disabling the acoustic confirmation gate")
+		}
+		*requireAcoustic = false
 
 	case "phone":
 		handsets, err := parsePhones(*phones)
