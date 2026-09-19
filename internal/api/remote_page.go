@@ -108,7 +108,7 @@ const remotePage = `<!doctype html>
   <button class="call wide" id="call">Call the emergency contact</button>
 </div>
 
-<p class="note" id="callnote">Tap once to arm, again within five seconds to place a real phone call.</p>
+<p class="note" id="callnote">Places a real phone call to the emergency contact.</p>
 <div class="log" id="log"></div>
 
 <script>
@@ -218,48 +218,44 @@ const remotePage = `<!doctype html>
     log("fetal heartbeat at " + BPM + " bpm");
   });
 
-  // A real phone call must not fire on a stray tap, so it takes two.
-  // Ten seconds, counted down on the button itself. Five was short enough
-  // that a real thumb, on a real phone, in a dim room, missed it.
-  var ARM_MS = 10000;
-  var armed = false, armTimer = null, tickTimer = null;
-  function disarm(why){
-    armed = false;
-    clearTimeout(armTimer); clearInterval(tickTimer);
-    var btn = $("call");
-    btn.classList.remove("armed");
-    btn.textContent = "Call the emergency contact";
-    if (why) log(why);
-  }
+  // One tap places the call.
+  //
+  // This started as an arm-then-confirm button, on the reasoning that a real
+  // phone call should not fire on a stray touch. On a phone, in a demo, that
+  // reasoning was wrong twice over: iOS ate the second tap as a zoom gesture,
+  // and even once that was fixed, a button you have to hit twice is a button
+  // that fails in front of an audience. The guard that stays is the one that
+  // matters - the call cannot be fired twice while one is already going out.
+  var calling = false;
   $("call").addEventListener("click", function(){
     var btn = $("call");
-    if (!armed) {
-      armed = true;
-      btn.classList.add("armed");
-      var left = ARM_MS / 1000;
-      btn.textContent = "Tap again to call \u00b7 " + left;
-      log("armed - tap again to place the call");
-      tickTimer = setInterval(function(){
-        left--;
-        if (left > 0) btn.textContent = "Tap again to call \u00b7 " + left;
-      }, 1000);
-      armTimer = setTimeout(function(){ disarm("call disarmed"); }, ARM_MS);
-      return;
-    }
-    clearTimeout(armTimer); clearInterval(tickTimer);
-    armed = false;
-    btn.classList.remove("armed");
-    btn.textContent = "Calling...";
+    if (calling) { log("already calling"); return; }
+    calling = true;
+    btn.classList.add("armed");
+    btn.textContent = "Calling\u2026";
     log("placing call");
     post("/api/call").then(function(j){
-      btn.textContent = "Call the emergency contact";
-      if (j && j.ok) { log("calling " + j.to + " - " + (j.status || "queued")); }
-      else { log("call failed: " + ((j && j.error) || "unknown")); }
+      if (j && j.ok) {
+        btn.textContent = "Called \u2713";
+        log("calling " + j.to + " - " + (j.status || "queued"));
+      } else {
+        btn.textContent = "Call failed";
+        log("call failed: " + ((j && j.error) || "unknown"));
+      }
+      release(btn);
     }).catch(function(e){
-      btn.textContent = "Call the emergency contact";
+      btn.textContent = "Call failed";
       log("call failed: " + e);
+      release(btn);
     });
   });
+  function release(btn){
+    setTimeout(function(){
+      calling = false;
+      btn.classList.remove("armed");
+      btn.textContent = "Call the emergency contact";
+    }, 4000);
+  }
 
   // Live counts. The detected number is the one that matters: it comes from
   // detections only, never from commands, so it cannot be inflated by pressing

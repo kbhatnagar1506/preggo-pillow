@@ -51,9 +51,18 @@ func TestHeartbeatIsInTheFetalRange(t *testing.T) {
 }
 
 // A real phone call must not fire on a stray tap.
-func TestCallNeedsTwoTaps(t *testing.T) {
-	if !strings.Contains(remotePage, "Tap again to call") {
-		t.Error("the call button does not arm before firing")
+// One tap calls. The arm-then-confirm gesture was removed: iOS swallowed the
+// second tap as a zoom, and a button that needs hitting twice fails in front
+// of an audience. What must survive is the re-entrancy guard, so a jittery
+// thumb cannot place two calls.
+func TestCallFiresOnOneTapButNotTwice(t *testing.T) {
+	if strings.Contains(remotePage, "Tap again to call") {
+		t.Error("the call button still requires a second tap")
+	}
+	for _, want := range []string{"var calling = false", "if (calling)", `post("/api/call")`} {
+		if !strings.Contains(remotePage, want) {
+			t.Errorf("the call button is missing %q", want)
+		}
 	}
 }
 
