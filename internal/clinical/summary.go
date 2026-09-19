@@ -99,22 +99,58 @@ type NightPoint struct {
 	Count int    `json:"count"`
 }
 
+// GuidelineRef is the clinical rule this note implements, shown beside the
+// analysis on the dashboard.
+//
+// It matters that this is visible. An LLM writing plausible medical-sounding
+// prose is worthless; an LLM applying a named, published rule to measured
+// numbers is a different thing, and the reader can check it.
+const GuidelineRef = "RCOG Green-top Guideline No. 57: Reduced Fetal Movements"
+
+// GuidelineURL points at the guideline itself.
+const GuidelineURL = "https://www.rcog.org.uk/guidance/browse-all-guidance/green-top-guidelines/reduced-fetal-movements-green-top-guideline-no-57/"
+
+// systemPrompt implements GTG-57 rather than inventing a rule.
+//
+// Each hard rule below traces to something the guideline actually says, and the
+// quotes are there so a future reader can check the implementation against the
+// source instead of trusting this comment.
 const systemPrompt = `You write a short clinical note for a midwife or obstetrician, summarising
 overnight fetal movement monitoring from a home device.
 
-Hard rules:
-- NEVER reassure that the baby is fine. There is no "all clear". Reassurance is the documented
-  failure mode of home fetal monitoring because it delays women from seeking care.
-- NEVER diagnose. Assessment of reduced fetal movement is a CTG and a scan, and belongs to a
-  clinician.
-- Compare only to THIS baby's own baseline, never to a population threshold. "Ten kicks in two
-  hours" is a population rule applied to a baby with its own pattern.
-- State the device's limits where relevant: counts are estimates from an accelerometer and contact
+You are applying RCOG Green-top Guideline No. 57 (Reduced Fetal Movements). Follow it; do not
+invent a rule of your own.
+
+Hard rules, each from the guideline:
+
+- COMPARE ONLY TO THIS BABY'S OWN BASELINE. The guideline is explicit that "there is no uniform
+  threshold of fetal movements above which perinatal morbidity increases", and advises that women
+  "be aware of their baby's individual pattern of movements". So never cite a population figure.
+  "Ten kicks in two hours" is a rule the guideline does not endorse.
+
+- LEAD WITH REPEAT EPISODES. Reduced movement reported "on two or more occasions" carries an
+  increased risk of stillbirth, fetal growth restriction and preterm birth. If this is the second
+  or later consecutive night below baseline, that is the most important thing in the note and it
+  goes in the first sentence, with the words "second consecutive night" or similar.
+
+- NEVER REASSURE. There is no "all clear" here, and false reassurance is the documented failure of
+  home fetal monitoring: it delays women from seeking care. Do not say the baby is fine, well,
+  healthy, normal, or reassuring. Absence of a flag is not evidence of wellbeing.
+
+- NEVER DIAGNOSE. Assessment of reduced fetal movement is a CTG and a scan, and belongs to a
+  clinician. Where movement is below baseline, say that assessment is indicated and that she should
+  contact her maternity unit today. Do not suggest waiting, monitoring at home, or trying again
+  later.
+
+- DO NOT OVERSTATE A SINGLE QUIET NIGHT. Around 70 percent of pregnancies with a single episode of
+  reduced fetal movements are uncomplicated. State the observation and the recommendation without
+  alarm; the point is to prompt contact, not fear.
+
+- STATE THE DEVICE'S LIMITS where relevant: counts are estimates from an accelerometer and contact
   microphone, and respiration is accurate to roughly plus or minus twenty percent.
 
 Style: three or four sentences, plain clinical English, no bullet points, no headings, no preamble.
-Lead with the movement trend. If movement is below baseline across consecutive nights, say so first
-and say that assessment is indicated today.`
+Lead with the movement trend.`
 
 // Summarize returns the note, or an error. The report renders fine without it.
 func (s *Summarizer) Summarize(ctx context.Context, in Input) (string, error) {

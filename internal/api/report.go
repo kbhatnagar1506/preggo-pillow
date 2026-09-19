@@ -100,6 +100,12 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		Simulated: simulated,
 		Maternal:  s.maternalStats(),
 		Note:      note,
+		// Shown beside the note so the rule being applied is visible and
+		// checkable. An LLM writing medical-sounding prose is worthless; an
+		// LLM applying a named published rule to measured numbers is not, and
+		// the difference has to be legible to the reader.
+		GuidelineRef: clinical.GuidelineRef,
+		GuidelineURL: clinical.GuidelineURL,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -109,22 +115,26 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 }
 
 type reportData struct {
-	Generated string
-	Nights    []store.Night
-	Baseline  int
-	Latest    int
-	Deviation float64
-	Alert     bool
-	Simulated bool
-	Maternal  map[string]any
-	Note      string
+	Generated    string
+	Nights       []store.Night
+	Baseline     int
+	Latest       int
+	Deviation    float64
+	Alert        bool
+	Simulated    bool
+	Maternal     map[string]any
+	Note         string
+	GuidelineRef string
+	GuidelineURL string
 }
 
 func (d reportData) DeviationStr() string {
 	return fmt.Sprintf("%+.0f%%", d.Deviation)
 }
 
-var reportTmpl = template.Must(template.New("report").Parse(`<!doctype html>
+// reportTmplSrc is named rather than inline so tests can assert on it. The
+// clinical guard rails live in this markup as much as in the prompt.
+const reportTmplSrc = `<!doctype html>
 <meta charset="utf-8">
 <title>Lull — record for your appointment</title>
 <style>
@@ -141,6 +151,8 @@ var reportTmpl = template.Must(template.New("report").Parse(`<!doctype html>
   .low{color:#b3261e;font-weight:600}
   h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#666;
      margin:28px 0 8px;font-weight:600}
+  .cite{font-size:12px;color:#5b6472;margin-top:-6px;line-height:1.5}
+  .cite a{color:#41506b}
   .note{background:#f6f7f9;border-left:3px solid #ccc;padding:12px 14px;
         font-size:13px;color:#444;margin-top:26px}
   .simtag{display:inline-block;padding:2px 7px;border-radius:4px;background:#fff3cd;
@@ -169,6 +181,9 @@ var reportTmpl = template.Must(template.New("report").Parse(`<!doctype html>
 {{if .Note}}
 <h2>Summary</h2>
 <p>{{.Note}}</p>
+<p class="cite">Assessed against <a href="{{.GuidelineURL}}">{{.GuidelineRef}}</a>,
+which advises comparison with the baby&rsquo;s own established pattern rather than
+any fixed count, and earlier review where reduced movement recurs.</p>
 {{end}}
 
 <h2>Fetal movement</h2>
@@ -212,4 +227,6 @@ var reportTmpl = template.Must(template.New("report").Parse(`<!doctype html>
 <p class="noprint" style="margin-top:24px">
   <button onclick="print()">Print this page</button>
 </p>
-`))
+`
+
+var reportTmpl = template.Must(template.New("report").Parse(reportTmplSrc))

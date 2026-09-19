@@ -50,10 +50,19 @@ func TestSummarizeReturnsTheCompletion(t *testing.T) {
 		var req map[string]any
 		_ = json.Unmarshal(body, &req)
 
-		// The safety rule must reach the model, not just live in our docs.
+		// The safety rules must reach the model, not just live in our docs.
+		// Checked over the wire rather than against the constant, because the
+		// failure that matters is the prompt not arriving.
 		msgs, _ := json.Marshal(req["messages"])
-		if !strings.Contains(string(msgs), "NEVER reassure") {
-			t.Error("system prompt did not carry the never-reassure rule")
+		for _, rule := range []string{
+			"NEVER REASSURE",
+			"NEVER DIAGNOSE",
+			"Green-top Guideline No. 57",
+			"THIS BABY'S OWN BASELINE",
+		} {
+			if !strings.Contains(string(msgs), rule) {
+				t.Errorf("system prompt did not carry %q to the model", rule)
+			}
 		}
 		// vertex-chat is a thinking model: reasoning tokens count against the
 		// cap, so a tight max_tokens silently returns an empty completion.
@@ -122,4 +131,72 @@ func TestBaseURLTrailingSlashIsTolerated(t *testing.T) {
 	if path != "/chat/completions" {
 		t.Errorf("path %q, want /chat/completions (no double slash)", path)
 	}
+}
+
+// The prompt is the clinical contract. It is the only place the guideline's
+// rules are encoded, it is a string with no compiler to check it, and a
+// well-meaning edit that drops a line changes what the system tells a pregnant
+// woman. These tests are that line's only guard.
+func TestPromptImplementsGuidelineRules(t *testing.T) {
+	rules := []struct{ name, needle string }{
+		{"names the guideline", "Green-top Guideline No. 57"},
+		{"forbids inventing a rule", "do not\ninvent a rule"},
+		{"quotes the no-threshold finding", "no uniform\n  threshold"},
+		{"requires the baby's own baseline", "THIS BABY'S OWN BASELINE"},
+		{"rejects the population rule", "Ten kicks in two hours"},
+		{"leads with repeat episodes", "two or more occasions"},
+		{"names consecutive nights", "second consecutive night"},
+		{"forbids reassurance", "NEVER REASSURE"},
+		{"forbids diagnosis", "NEVER DIAGNOSE"},
+		{"directs to the maternity unit", "contact her maternity unit today"},
+		{"forbids advising delay", "Do not suggest waiting"},
+		{"calibrates a single episode", "70 percent"},
+		{"states device limits", "twenty percent"},
+	}
+	for _, r := range rules {
+		t.Run(r.name, func(t *testing.T) {
+			if !strings.Contains(systemPrompt, r.needle) {
+				t.Errorf("the prompt no longer contains %q — a guideline rule has been lost", r.needle)
+			}
+		})
+	}
+}
+
+// Reassurance is the documented failure mode of home fetal monitoring: a woman
+// hears "looks fine", waits, and presents late. The prompt must never license
+// it, so no phrasing that could read as an all-clear may creep in.
+func TestPromptNeverLicensesReassurance(t *testing.T) {
+	banned := []string{
+		"reassure the", "all clear", "baby is fine", "looks healthy",
+		"no cause for concern", "nothing to worry",
+	}
+	lower := strings.ToLower(systemPrompt)
+	for _, b := range banned {
+		idx := strings.Index(lower, strings.ToLower(b))
+		if idx < 0 {
+			continue
+		}
+		// It is fine to mention these as things to avoid; not fine to permit them.
+		window := lower[max0(idx-60):idx]
+		if !strings.Contains(window, "never") && !strings.Contains(window, "do not") &&
+			!strings.Contains(window, "no ") {
+			t.Errorf("the prompt appears to permit reassurance near %q", b)
+		}
+	}
+}
+
+func TestGuidelineReferenceIsExported(t *testing.T) {
+	if !strings.Contains(GuidelineRef, "Green-top Guideline No. 57") {
+		t.Errorf("GuidelineRef = %q", GuidelineRef)
+	}
+	if !strings.HasPrefix(GuidelineURL, "https://www.rcog.org.uk/") {
+		t.Errorf("GuidelineURL should point at RCOG, got %q", GuidelineURL)
+	}
+}
+
+func max0(v int) int {
+	if v < 0 {
+		return 0
+	}
+	return v
 }
