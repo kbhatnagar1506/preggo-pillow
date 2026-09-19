@@ -6,12 +6,15 @@ package main
 // build tag so the Mac still builds and tests everything else.
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kbhatnagar1506/lull/internal/kicker"
+	"github.com/kbhatnagar1506/lull/internal/knob"
 	"github.com/kbhatnagar1506/lull/internal/sensor"
 )
 
@@ -139,4 +142,36 @@ func hardwareSource(busSpec string, sampleHz, motorBus int, motorAddr uint8) (
 	}
 	log.Printf("  phantom  /dev/i2c-%d  Grove motor driver at 0x%02X", motorBus, motorAddr)
 	return src, servo, cleanup, nil
+}
+
+// startKnob wires the rotary angle sensor to the "she felt it" record.
+//
+// This is the human channel of the blind test. The dial is a tally: one notch
+// per movement she noticed. Put beside what the detector found, it makes the
+// clinical premise visible rather than asserted — people under-perceive fetal
+// movement, and a judge can watch it happen.
+//
+// channel < 0 means "find it": the dial is located by asking which analog input
+// swings, because on this HAT the socket label does not always match the
+// channel number.
+func startKnob(ctx context.Context, bus, channel int, onTurn func(time.Time, int)) (func(), error) {
+	adc, err := sensor.OpenADC(bus)
+	if err != nil {
+		return nil, err
+	}
+	if v, err := adc.Version(); err == nil {
+		log.Printf("  grove ADC on /dev/i2c-%d, firmware v%d", bus, v)
+	}
+	if channel < 0 {
+		log.Printf("  looking for the dial — turn it now, 6 seconds")
+		ch, swing, err := adc.FindSwingingChannel(6*time.Second, 1200)
+		if err != nil {
+			_ = adc.Close()
+			return nil, err
+		}
+		log.Printf("  dial found on A%d (%d mV of travel)", ch, swing)
+		channel = ch
+	}
+	go knob.Run(ctx, adc, channel, onTurn)
+	return func() { _ = adc.Close() }, nil
 }

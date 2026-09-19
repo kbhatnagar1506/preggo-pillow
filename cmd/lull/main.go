@@ -50,6 +50,10 @@ func main() {
 		buses = flag.String("buses", "abdo_a=1,abdo_b=3,ref=4",
 			"accelerometer I2C buses as node=busnumber (one bus each: identical "+
 				"chips share an address and would collide)")
+		knobEnable  = flag.Bool("knob", false, "read a Grove rotary angle sensor as the human \"I felt it\" tally")
+		knobBus     = flag.Int("knob-bus", 1, "I2C bus the Grove Base HAT ADC is on")
+		knobChannel = flag.Int("knob-channel", -1, "ADC channel the dial is on; -1 finds it by asking you to turn it")
+
 		motorBus  = flag.Int("motor-bus", 1, "I2C bus the Grove motor driver is on")
 		motorAddr = flag.Int("motor-addr", 0x0F, "Grove motor driver address (DIP-switch selectable)")
 
@@ -290,6 +294,30 @@ func main() {
 				"ready":           st.Ready,
 			}
 		},
+	}
+
+	// --- the dial: the human half of the blind test -------------------
+	// One notch per movement she noticed. Recorded to `presses`, the same
+	// table the on-screen button writes to, so the three-way comparison
+	// (fired / detected / felt) does not care which input was used.
+	if *knobEnable {
+		stop, err := startKnob(ctx, *knobBus, *knobChannel, func(t time.Time, settled int) {
+			if err := st.InsertPress(t, "knob"); err != nil {
+				log.Printf("knob press insert: %v", err)
+			}
+			hub.Broadcast(api.Event{Kind: "press", Data: map[string]any{
+				"t_ms": t.UnixMilli(), "source": "knob", "mv": settled,
+			}})
+			log.Printf("knob: felt-movement mark recorded")
+		})
+		if err != nil {
+			// Not fatal. The dial is one input to one of three records; losing
+			// it must not take the detector down with it.
+			log.Printf("knob unavailable: %v", err)
+		} else {
+			defer stop()
+			log.Printf("knob: recording felt-movement marks")
+		}
 	}
 
 	httpSrv := &http.Server{
