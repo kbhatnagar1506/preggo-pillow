@@ -59,7 +59,17 @@ func New(servo Servo, onFire func(t time.Time, strength string)) *Kicker {
 	}
 }
 
+// Every method below tolerates a nil Kicker.
+//
+// The servo is optional hardware — on the phone path there is no phantom to
+// drive at all — and a nil servo was already handled. A nil *Kicker* was not:
+// handleKick called Fire unconditionally, so a build with no injector wired
+// panicked on a request that anyone on the network can make without a
+// session, because the phone remote is unauthenticated by design.
 func (k *Kicker) Running() bool {
+	if k == nil {
+		return false
+	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	return k.running
@@ -68,6 +78,9 @@ func (k *Kicker) Running() bool {
 // Start begins the randomized schedule. This is blind-test mode: the judge
 // never knows when a kick is coming.
 func (k *Kicker) Start() {
+	if k == nil {
+		return
+	}
 	k.mu.Lock()
 	if k.running {
 		k.mu.Unlock()
@@ -93,6 +106,9 @@ func (k *Kicker) Start() {
 }
 
 func (k *Kicker) Stop() {
+	if k == nil {
+		return
+	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if !k.running {
@@ -105,6 +121,9 @@ func (k *Kicker) Stop() {
 // FireRandom picks a strength and kicks. Weak is weighted most heavily so the
 // blind test is genuinely hard.
 func (k *Kicker) FireRandom() {
+	if k == nil {
+		return
+	}
 	r := rand.Float64()
 	s := Medium
 	switch {
@@ -121,6 +140,9 @@ func (k *Kicker) FireRandom() {
 // Fire kicks at a named strength. Used by the warm-up demo, where a judge
 // presses a button and watches the count move.
 func (k *Kicker) Fire(strength string) {
+	if k == nil {
+		return
+	}
 	amp, ok := amplitudes[strength]
 	if !ok {
 		amp = amplitudes[Medium]

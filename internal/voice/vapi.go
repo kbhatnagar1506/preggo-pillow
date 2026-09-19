@@ -19,6 +19,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kbhatnagar1506/lull/internal/brand"
 )
 
 // DefaultBaseURL is Vapi's API.
@@ -68,7 +70,7 @@ func (a Alert) Script() string {
 		return s
 	}
 	var b strings.Builder
-	b.WriteString("Hello. This is an automated alert from Lull, the fetal movement monitor. ")
+	b.WriteString("Hello. This is an automated alert from " + brand.Product + ", " + brand.Tagline + ". ")
 	switch {
 	case a.Nights >= 2:
 		fmt.Fprintf(&b, "For %d nights running, the baby's movement has been below its own established baseline. ", a.Nights)

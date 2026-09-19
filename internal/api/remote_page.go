@@ -10,7 +10,7 @@ const remotePage = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0d14">
-<title>Lull remote</title>
+<title>Preggo Pillow remote</title>
 <style>
   :root{
     --ink:#f2f4f8; --dim:#8b93a7; --ground:#0b0d14; --panel:#151926;
@@ -72,7 +72,7 @@ const remotePage = `<!doctype html>
 </style>
 
 <header>
-  <h1>Lull &middot; remote</h1>
+  <h1>Preggo Pillow &middot; remote</h1>
   <div class="who"><span class="dot" id="dot"></span><span id="link">connecting</span></div>
 </header>
 

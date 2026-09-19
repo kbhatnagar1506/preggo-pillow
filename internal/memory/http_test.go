@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/kbhatnagar1506/lull/internal/maternal"
 )
 
 func client(t *testing.T, base string) *Client {
@@ -215,5 +217,118 @@ func TestFindsExistingAssistantByNameBeforeCreating(t *testing.T) {
 	}
 	if c.AssistantID() != "existing-1" {
 		t.Errorf("assistant %q, want existing-1", c.AssistantID())
+	}
+}
+
+// ---- what the maternal memory is allowed to say about her breathing --------
+
+// rememberedContent runs one Recorder call against a fake Backboard and returns
+// the prose it wrote. The prose is the part that matters: Backboard recall is
+// semantic search over content, so a rate stated here comes back months later
+// as a fact about a patient, in a clinician's hands, with no trace of the
+// thirty-second accelerometer window it was estimated from.
+func rememberedContent(t *testing.T, write func(*Recorder)) (string, map[string]any) {
+	t.Helper()
+	type got struct {
+		content string
+		meta    map[string]any
+	}
+	ch := make(chan got, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		_ = json.Unmarshal(body, &req)
+		c, _ := req["content"].(string)
+		md, _ := req["metadata"].(map[string]any)
+		select {
+		case ch <- got{c, md}:
+		default:
+		}
+		_, _ = w.Write([]byte(`{"memory_id":"m1"}`))
+	}))
+	defer srv.Close()
+
+	write(NewRecorder(client(t, srv.URL)))
+	select {
+	case g := <-ch:
+		return g.content, g.meta
+	case <-time.After(5 * time.Second):
+		t.Fatal("no memory reached the server")
+		return "", nil
+	}
+}
+
+// The entry that started this read "she slept mostly lateral, waking 5 times,
+// breathing around 6 a minute" — a number the estimator produced off a woman
+// breathing normally, written into a clinician-facing record as a measurement.
+//
+// A rate the tracker will not stand behind must not appear in the prose at any
+// value, plausible-looking ones included.
+func TestMaternalMemoryNeverQuotesAnUnreliableBreathingRate(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		ms   maternal.Stats
+	}{
+		{"the 6 rpm that started this", maternal.Stats{
+			Posture: "lateral", WakeEvents: 5,
+			RespirationRPM: 6, RespirationQuality: maternal.RespUnmeasured}},
+		{"provisional, near the floor", maternal.Stats{
+			Posture: "lateral", WakeEvents: 5,
+			RespirationRPM: 8, RespirationQuality: maternal.RespProvisional}},
+		{"provisional, ordinary looking", maternal.Stats{
+			Posture: "lateral", WakeEvents: 5,
+			RespirationRPM: 16, RespirationQuality: maternal.RespProvisional}},
+		{"quality never set", maternal.Stats{
+			Posture: "lateral", WakeEvents: 5, RespirationRPM: 6}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			content, meta := rememberedContent(t, func(r *Recorder) {
+				r.Maternal("2026-09-19", c.ms)
+			})
+			if strings.Contains(content, "breathing around") {
+				t.Errorf("an unreliable rate was narrated as a measurement: %q", content)
+			}
+			for _, n := range []string{"6 a minute", "8 a minute", "16 a minute"} {
+				if strings.Contains(content, n) {
+					t.Errorf("record quotes %q from a %q estimate: %q", n, c.ms.RespirationQuality, content)
+				}
+			}
+			// The figure is not lost, it is just not a sentence about her.
+			if meta["lull_respiration_quality"] != string(c.ms.RespirationQuality) {
+				t.Errorf("metadata dropped the quality: %v", meta)
+			}
+		})
+	}
+}
+
+// A provisional estimate says so out loud. Silence would read as "breathing was
+// not worth mentioning" when what happened is that the device could not resolve
+// it, and those are different facts about a night.
+func TestMaternalMemoryNamesAnUnresolvedBreathingRate(t *testing.T) {
+	content, _ := rememberedContent(t, func(r *Recorder) {
+		r.Maternal("2026-09-19", maternal.Stats{
+			Posture: "lateral", WakeEvents: 5,
+			RespirationRPM: 8, RespirationQuality: maternal.RespProvisional,
+		})
+	})
+	if !strings.Contains(content, "no reliable breathing rate") {
+		t.Errorf("a provisional estimate vanished silently instead of being named: %q", content)
+	}
+}
+
+// The control: a rate the tracker stands behind is still written down. A gate
+// that swallows every measurement has not fixed anything, it has removed the
+// panel.
+func TestMaternalMemoryStillRecordsAMeasuredRate(t *testing.T) {
+	content, _ := rememberedContent(t, func(r *Recorder) {
+		r.Maternal("2026-09-19", maternal.Stats{
+			Posture: "lateral", SupineMinutes: 42, WakeEvents: 5,
+			RespirationRPM: 14, RespirationQuality: maternal.RespMeasured,
+		})
+	})
+	for _, want := range []string{"breathing around 14 a minute", "42 minutes on her back", "waking 5 times"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("memory is missing %q: %q", want, content)
+		}
 	}
 }

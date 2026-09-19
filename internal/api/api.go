@@ -18,6 +18,7 @@ import (
 	"github.com/kbhatnagar1506/lull/internal/auth"
 	"github.com/kbhatnagar1506/lull/internal/clinical"
 	"github.com/kbhatnagar1506/lull/internal/kicker"
+	"github.com/kbhatnagar1506/lull/internal/maternal"
 	"github.com/kbhatnagar1506/lull/internal/memory"
 	"github.com/kbhatnagar1506/lull/internal/store"
 	"github.com/kbhatnagar1506/lull/internal/vitals"
@@ -42,6 +43,9 @@ func NewHub() *Hub {
 
 func (h *Hub) subscribe() chan Event {
 	ch := make(chan Event, 128)
+	if h == nil {
+		return ch
+	}
 	h.mu.Lock()
 	h.clients[ch] = struct{}{}
 	h.mu.Unlock()
@@ -49,6 +53,10 @@ func (h *Hub) subscribe() chan Event {
 }
 
 func (h *Hub) unsubscribe(ch chan Event) {
+	if h == nil {
+		close(ch)
+		return
+	}
 	h.mu.Lock()
 	delete(h.clients, ch)
 	h.mu.Unlock()
@@ -58,6 +66,9 @@ func (h *Hub) unsubscribe(ch chan Event) {
 // Broadcast never blocks. A slow browser drops frames rather than stalling the
 // detector, which is the right trade for a live demo.
 func (h *Hub) Broadcast(e Event) {
+	if h == nil {
+		return
+	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for ch := range h.clients {
@@ -136,27 +147,40 @@ func (s *Server) Routes() *http.ServeMux {
 			http.Error(w, "dashboard assets not mounted", http.StatusServiceUnavailable)
 		})
 	}
+	// Open: the phone remote runs without a session on purpose, and the
+	// Presage bridge posts vitals from a separate process. These carry no
+	// stored record — they fire the servo, log a press, or push a reading.
 	mux.HandleFunc("/api/stream", s.handleStream)
 	mux.HandleFunc("/api/press", s.handlePress)
 	mux.HandleFunc("/api/kick", s.handleKick)
+	mux.HandleFunc("/api/fool", s.handleFool)
+	mux.HandleFunc("/api/call", s.handleCall)
+	mux.HandleFunc("/api/vitals", s.handleVitals)
 	mux.HandleFunc("/api/blind/start", s.handleBlindStart)
 	mux.HandleFunc("/api/blind/stop", s.handleBlindStop)
 	mux.HandleFunc("/api/blind/score", s.handleBlindScore)
-	mux.HandleFunc("/api/nights", s.handleNights)
-	mux.HandleFunc("/api/fool", s.handleFool)
-	mux.HandleFunc("/api/maternal", s.handleMaternal)
-	mux.HandleFunc("/report", s.handleReport)
-	mux.HandleFunc("/api/memories", s.handleMemoryList)
-	mux.HandleFunc("/api/note", s.handleNote)
-	mux.HandleFunc("/api/profile", s.handleProfile)
-	mux.HandleFunc("/api/appointment", s.handleAppointment)
-	mux.HandleFunc("/api/ask", s.handleAsk)
-	mux.HandleFunc("/api/call", s.handleCall)
-	mux.HandleFunc("/api/vitals", s.handleVitals)
-	mux.HandleFunc("/api/meds", s.handleMeds)
-	mux.HandleFunc("/api/meds/remove", s.handleMedRemove)
-	mux.HandleFunc("/api/dose", s.handleDose)
-	mux.HandleFunc("/api/settings", s.handleSettings)
+
+	// Gated: everything that reads or writes the record. Gating the pages but
+	// leaving the data behind them open means the pages were never gated —
+	// /report alone is the whole clinical summary, and /api/memories is the
+	// written narrative including every alert.
+	api := func(h http.HandlerFunc) http.Handler {
+		if s.Auth != nil && s.Auth.Enabled() {
+			return s.Auth.RequireAPI(h)
+		}
+		return h
+	}
+	mux.Handle("/api/nights", api(s.handleNights))
+	mux.Handle("/api/maternal", api(s.handleMaternal))
+	mux.Handle("/api/memories", api(s.handleMemoryList))
+	mux.Handle("/api/note", api(s.handleNote))
+	mux.Handle("/api/profile", api(s.handleProfile))
+	mux.Handle("/api/appointment", api(s.handleAppointment))
+	mux.Handle("/api/ask", api(s.handleAsk))
+	mux.Handle("/api/meds", api(s.handleMeds))
+	mux.Handle("/api/meds/remove", api(s.handleMedRemove))
+	mux.Handle("/api/dose", api(s.handleDose))
+	mux.Handle("/api/settings", api(s.handleSettings))
 	// The landing page is "/", so the dashboard needs its own path. Serving
 	// dashboard.html under a clean URL rather than exposing the file name.
 	// Auth routes and the two pages, when configured.
@@ -185,6 +209,10 @@ func (s *Server) Routes() *http.ServeMux {
 		}
 		return h
 	}
+	// The report is the clinical record in full. It is a page, not an API, so
+	// an expired session should land on the login screen rather than a blob
+	// of JSON.
+	mux.Handle("/report", gate(http.HandlerFunc(s.handleReport)))
 	for path, file := range map[string]string{
 		"/dashboard":   "dashboard.html",
 		"/history":     "history.html",
@@ -299,12 +327,12 @@ func (s *Server) handleBlindScore(w http.ResponseWriter, r *http.Request) {
 	}
 	score, err := s.Store.ScoreWindow(from, to, 900*time.Millisecond)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	events, err := s.Store.EventsWindow(from, to)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	writeJSON(w, map[string]any{
@@ -326,7 +354,8 @@ func (s *Server) maternalStats() map[string]any {
 	if s.Maternal == nil {
 		return map[string]any{
 			"posture": "unknown", "supine_minutes": 0.0, "respiration_rpm": 0.0,
-			"wake_events": 0, "snore_percent": 0.0, "ready": false,
+			"respiration_quality": string(maternal.RespUnmeasured),
+			"wake_events":         0, "snore_percent": 0.0, "ready": false,
 		}
 	}
 	return s.Maternal()
@@ -339,12 +368,12 @@ func (s *Server) handleMaternal(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleNights(w http.ResponseWriter, r *http.Request) {
 	nights, err := s.Store.Nights(30)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	baseline, err := s.Store.Baseline(1)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	var latest int

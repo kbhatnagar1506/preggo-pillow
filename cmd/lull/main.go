@@ -32,6 +32,7 @@ import (
 
 	"github.com/kbhatnagar1506/lull/internal/api"
 	"github.com/kbhatnagar1506/lull/internal/auth"
+	"github.com/kbhatnagar1506/lull/internal/brand"
 	"github.com/kbhatnagar1506/lull/internal/clinical"
 	"github.com/kbhatnagar1506/lull/internal/detect"
 	"github.com/kbhatnagar1506/lull/internal/kicker"
@@ -135,7 +136,14 @@ func main() {
 	// The device remembers the numbers. Backboard remembers the pregnancy.
 	// Entirely optional: with no key, everything below degrades to a log line.
 	memCtx, memCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	mem, _ := memory.New(memCtx, memory.Options{APIKey: *bbKey, AssistantID: *bbID, Name: "Lull"})
+	// The assistant is found by name when no id is given, so renaming the
+	// product would silently create a second, empty assistant and orphan the
+	// record the Healthcare page reads. Pin the id if you have one.
+	mem, _ := memory.New(memCtx, memory.Options{
+		APIKey:      *bbKey,
+		AssistantID: firstNonEmpty(*bbID, os.Getenv("BACKBOARD_ASSISTANT_ID")),
+		Name:        brand.Product,
+	})
 	memCancel()
 	defer mem.Close()
 	rec := memory.NewRecorder(mem)
@@ -453,12 +461,16 @@ func main() {
 		Maternal: func() map[string]any {
 			st := mat.Stats()
 			return map[string]any{
-				"posture":         st.Posture,
-				"supine_minutes":  st.SupineMinutes,
-				"respiration_rpm": st.RespirationRPM,
-				"wake_events":     st.WakeEvents,
-				"snore_percent":   st.SnorePercent,
-				"ready":           st.Ready,
+				"posture":        st.Posture,
+				"supine_minutes": st.SupineMinutes,
+				// The rate never travels without the confidence in it: the
+				// dashboard hedges a provisional figure and the report and
+				// the clinical note decline to quote one at all.
+				"respiration_rpm":     st.RespirationRPM,
+				"respiration_quality": string(st.RespirationQuality),
+				"wake_events":         st.WakeEvents,
+				"snore_percent":       st.SnorePercent,
+				"ready":               st.Ready,
 			}
 		},
 	}
@@ -569,8 +581,7 @@ func recordNightly(ctx context.Context, st *store.Store, mat *maternal.Tracker, 
 		rec.Night(latest.Date, latest.KickCount, baseline, dev)
 
 		if ms := mat.Stats(); ms.Ready {
-			rec.Maternal(latest.Date, ms.Posture, ms.SupineMinutes,
-				ms.RespirationRPM, ms.SnorePercent, ms.WakeEvents)
+			rec.Maternal(latest.Date, ms)
 		}
 
 		// Two consecutive nights, never one: fetal sleep cycles run 20-40

@@ -86,12 +86,20 @@ type Input struct {
 	Baseline       float64      `json:"baseline"`
 	Tonight        int          `json:"tonight"`
 	DeviationPct   float64      `json:"deviation_percent"`
-	Posture        string       `json:"posture"`
-	SupineMinutes  float64      `json:"supine_minutes"`
-	RespirationRPM float64      `json:"respiration_rpm"`
-	SnorePercent   float64      `json:"snore_percent"`
-	WakeEvents     int          `json:"wake_events"`
-	Alert          bool         `json:"alert"`
+	Posture       string  `json:"posture"`
+	SupineMinutes float64 `json:"supine_minutes"`
+
+	// RespirationRPM is omitted unless RespirationQuality says the tracker
+	// stands behind it. See withoutUnreliableRespiration.
+	RespirationRPM float64 `json:"respiration_rpm,omitempty"`
+	// RespirationQuality is maternal.RespirationQuality as a string. Kept as
+	// a string so this package stays a wire format with no opinion about
+	// accelerometers, the same way Source is on MaternalVitals.
+	RespirationQuality string `json:"respiration_quality,omitempty"`
+
+	SnorePercent float64 `json:"snore_percent"`
+	WakeEvents   int     `json:"wake_events"`
+	Alert        bool    `json:"alert"`
 
 	// Contactless maternal vitals, where an instrument measured them. This is
 	// the control arm of the whole argument: "her numbers are normal AND the
@@ -114,6 +122,27 @@ type MaternalVitals struct {
 type NightPoint struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
+}
+
+// RespirationMeasured is the one RespirationQuality under which a breathing
+// rate may be sent to the model at all. It mirrors maternal.RespMeasured;
+// TestRespirationQualityAgreesWithTheTracker in internal/api pins the two
+// together so they cannot drift apart silently.
+const RespirationMeasured = "measured"
+
+// withoutUnreliableRespiration drops a breathing rate the tracker would not
+// stand behind, before the model ever sees it.
+//
+// The prompt already forbids quoting an unresolved rate, but a prompt is a
+// request and this note goes into a clinical record. A model cannot narrate a
+// number it was never given, so the number is withheld rather than caveated.
+// The quality string still travels, so the note can say the rate was not
+// resolved — which is a fact, and a useful one.
+func (in Input) withoutUnreliableRespiration() Input {
+	if in.RespirationQuality != RespirationMeasured {
+		in.RespirationRPM = 0
+	}
+	return in
 }
 
 // GuidelineRef is the clinical rule this note implements, shown beside the
@@ -167,6 +196,12 @@ Hard rules, each from the guideline:
   Respiration derived from the accelerometer is accurate to roughly plus or minus twenty percent
   and must be qualified as such.
 
+- NEVER INVENT A BREATHING RATE. respiration_rpm is present only when the device resolved one it
+  stands behind. When respiration_quality is "provisional" or "unmeasured", or respiration_rpm is
+  absent, there is no maternal breathing rate for this night: say it was not resolved, or say
+  nothing about it. Do not estimate one, do not infer one from the other figures, and never read
+  an absent rate as a low rate — a missing number is a missing measurement, not bradypnoea.
+
 - USE THE MATERNAL VITALS AS A CONTROL, when maternal_vitals is present. If her pulse and breathing
   are within normal range while movement is below baseline, say so explicitly in one clause: it
   distinguishes a change in the baby from a change in the mother, and it is the single most useful
@@ -182,7 +217,7 @@ func (s *Summarizer) Summarize(ctx context.Context, in Input) (string, error) {
 	if !s.Enabled() {
 		return "", fmt.Errorf("summariser not configured")
 	}
-	payload, err := json.Marshal(in)
+	payload, err := json.Marshal(in.withoutUnreliableRespiration())
 	if err != nil {
 		return "", err
 	}

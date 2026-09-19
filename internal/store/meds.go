@@ -94,6 +94,9 @@ func NormaliseTimes(raw string) ([]string, error) {
 }
 
 func (s *Store) AddMedication(name, dose string, times []string) (int64, error) {
+	if err := s.ok(); err != nil {
+		return 0, err
+	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return 0, fmt.Errorf("a medication needs a name")
@@ -110,6 +113,9 @@ func (s *Store) AddMedication(name, dose string, times []string) (int64, error) 
 }
 
 func (s *Store) Medications() ([]Medication, error) {
+	if err := s.ok(); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`SELECT id, name, dose, times FROM medications ORDER BY times, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list medications: %w", err)
@@ -135,6 +141,9 @@ func (s *Store) Medications() ([]Medication, error) {
 // adherence figure that follows, which is the one thing this number must
 // never do.
 func (s *Store) RemoveMedication(id int64) error {
+	if err := s.ok(); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`DELETE FROM medications WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("remove medication: %w", err)
@@ -146,6 +155,9 @@ func (s *Store) RemoveMedication(id int64) error {
 // time that day is asked for. Future dates are listed but not written: nothing
 // is owed until the day arrives.
 func (s *Store) DosesOn(date string, today string) ([]Dose, error) {
+	if err := s.ok(); err != nil {
+		return nil, err
+	}
 	meds, err := s.Medications()
 	if err != nil {
 		return nil, err
@@ -203,6 +215,9 @@ func (s *Store) DosesOn(date string, today string) ([]Dose, error) {
 // "due" undoes a mistap, which has to be possible or people stop being honest
 // with the button.
 func (s *Store) MarkDose(medID int64, date, at, state string) error {
+	if err := s.ok(); err != nil {
+		return err
+	}
 	if _, err := s.db.Exec(`INSERT OR IGNORE INTO doses(med_id, due_date, due_time) VALUES(?,?,?)`,
 		medID, date, at); err != nil {
 		return fmt.Errorf("mark dose: %w", err)
@@ -230,6 +245,9 @@ func (s *Store) MarkDose(medID int64, date, at, state string) error {
 // Only days that have arrived count, so this morning's untaken pill does not
 // read as a miss at 7am.
 func (s *Store) Adherence(days int, today string) (taken, total int, err error) {
+	if err := s.ok(); err != nil {
+		return 0, 0, err
+	}
 	if days < 1 {
 		days = 1
 	}

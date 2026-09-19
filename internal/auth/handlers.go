@@ -332,6 +332,22 @@ func (s *Service) Require(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAPI is Require for endpoints a script calls rather than a person
+// visits. A 302 to the login page would arrive at a fetch() as a chunk of
+// HTML and fail inside JSON.parse, hiding an expired session behind a syntax
+// error. 401 lets the caller see what actually happened.
+func (s *Service) RequireAPI(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := s.Current(w, r, true); ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "sign in required"})
+	})
+}
+
 // ------------------------------------------------------------------- helpers
 
 // SafeNext refuses anything that is not a local path, so ?next= cannot be used

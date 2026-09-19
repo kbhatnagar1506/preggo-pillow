@@ -266,7 +266,7 @@ async function score(){
   $('scoreBox').innerHTML = `
     <table>
       <tr><td>Kicks delivered</td><td>${s.commands}</td></tr>
-      <tr><td style="color:var(--green)">Lull caught</td><td style="color:var(--green)">${s.machine_hits} / ${s.commands}</td></tr>
+      <tr><td style="color:var(--green)">The pillow caught</td><td style="color:var(--green)">${s.machine_hits} / ${s.commands}</td></tr>
       <tr><td style="color:var(--amber)">You caught</td><td style="color:var(--amber)">${s.human_hits} / ${s.commands}</td></tr>
       <tr><td>False positives</td><td>${s.machine_false_pos}</td></tr>
     </table>
@@ -277,7 +277,7 @@ async function score(){
   drawOverlay(d);
 }
 
-/* The reveal: every kick delivered, what Lull caught, what the judge pressed,
+/* The reveal: every kick delivered, what The pillow caught, what the judge pressed,
    on one timeline. This is the moment, so it is a picture and not a table. */
 function drawOverlay(d){
   const c = $('overlay'); c.style.display = 'block'; $('legend').style.display = 'block';
@@ -317,8 +317,19 @@ async function refreshMaternal(){
   // The tracker reports 0 to mean "could not resolve a rate", not "no
   // breathing". Rendering that as "0 /min - normal" is worse than saying
   // nothing: it is a vital sign reported as reassuring when it is absent.
-  set('v-resp',   d.respiration_rpm > 0 ? Math.round(d.respiration_rpm) + ' /min' : '\u2014',
-                  d.respiration_rpm > 0 ? 'normal' : 'not resolved');
+  //
+  // "provisional" is the third case and the one that bites: a rate that did
+  // clear the plausibility gate but only just, or on a signal barely above
+  // the sensor's noise. This is a live panel, so the number is shown — but
+  // labelled, never as 'normal', because the same window could as easily
+  // have resolved nothing at all.
+  if (d.respiration_quality === 'measured') {
+    set('v-resp', Math.round(d.respiration_rpm) + ' /min', 'normal');
+  } else if (d.respiration_quality === 'provisional') {
+    set('v-resp', '~' + Math.round(d.respiration_rpm) + ' /min', 'not reliable');
+  } else {
+    set('v-resp', '\u2014', 'not resolved');
+  }
   set('v-snore',  d.snore_percent.toFixed(1) + '%',        'normal');
   set('v-supine', d.posture,
       d.posture === 'supine' ? Math.round(d.supine_minutes) + ' min on her back' : 'off her back');

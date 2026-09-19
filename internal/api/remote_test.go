@@ -20,7 +20,7 @@ func TestRemoteServedAtOwnerPath(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Errorf("%s -> %d", path, rr.Code)
 		}
-		if !strings.Contains(rr.Body.String(), "Lull") {
+		if !strings.Contains(rr.Body.String(), "Preggo Pillow") {
 			t.Errorf("%s did not serve the remote", path)
 		}
 	}

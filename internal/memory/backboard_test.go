@@ -3,6 +3,8 @@ package memory
 import (
 	"context"
 	"testing"
+
+	"github.com/kbhatnagar1506/lull/internal/maternal"
 )
 
 // sanitizeMetadata exists for one reason: Backboard type-locks a metadata key
@@ -146,7 +148,10 @@ func TestRecorderOnDisabledClientIsSafe(t *testing.T) {
 	r.Profile("Maya", 34, "2 November 2026")
 	r.Night("2026-09-18", 198, 341, -41.9)
 	r.Alert("2026-09-18", 198, 341, -41.9, 2)
-	r.Maternal("2026-09-18", "lateral", 0, 15, 0, 3)
+	r.Maternal("2026-09-18", maternal.Stats{
+		Posture: "lateral", RespirationRPM: 15,
+		RespirationQuality: maternal.RespMeasured, WakeEvents: 3,
+	})
 	r.Note("he has been quieter")
 	r.Appointment("14 September 2026", "CTG normal")
 }

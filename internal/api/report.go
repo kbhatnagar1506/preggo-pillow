@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/kbhatnagar1506/lull/internal/brand"
 	"github.com/kbhatnagar1506/lull/internal/clinical"
+	"github.com/kbhatnagar1506/lull/internal/maternal"
 	"github.com/kbhatnagar1506/lull/internal/store"
 )
 
@@ -33,14 +35,16 @@ func f64(v any) float64 {
 //
 // Printable straight from the browser. Do not build a PDF library at hour 20.
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
+	// No database is unavailability, not a broken request: -source phone runs
+	// the whole product without one.
 	nights, err := s.Store.Nights(14)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	baseline, err := s.Store.Baseline(1)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
@@ -87,14 +91,17 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		cctx, ccancel := context.WithTimeout(r.Context(), 60*time.Second)
 		n, err := s.Clinical.Summarize(cctx, clinical.Input{
 			Nights: pts, Baseline: baseline, Tonight: latest.KickCount,
-			DeviationPct:   deviation,
-			Posture:        str(m["posture"]),
-			SupineMinutes:  f64(m["supine_minutes"]),
-			RespirationRPM: f64(m["respiration_rpm"]),
-			SnorePercent:   f64(m["snore_percent"]),
-			WakeEvents:     int(f64(m["wake_events"])),
-			Alert:          alert,
-			MaternalVitals: mv,
+			DeviationPct:  deviation,
+			Posture:       str(m["posture"]),
+			SupineMinutes: f64(m["supine_minutes"]),
+			// The quality travels with the rate, and Summarize withholds the
+			// rate itself unless the tracker stands behind it.
+			RespirationRPM:     f64(m["respiration_rpm"]),
+			RespirationQuality: str(m["respiration_quality"]),
+			SnorePercent:       f64(m["snore_percent"]),
+			WakeEvents:         int(f64(m["wake_events"])),
+			Alert:              alert,
+			MaternalVitals:     mv,
 		})
 		ccancel()
 		if err != nil {
@@ -142,6 +149,10 @@ type reportData struct {
 	GuidelineURL string
 }
 
+// Product is read from the brand package rather than typed into the markup,
+// so the record a midwife reads carries the same name as the app it came from.
+func (d reportData) Product() string { return brand.Product }
+
 func (d reportData) DeviationStr() string {
 	return fmt.Sprintf("%+.0f%%", d.Deviation)
 }
@@ -150,7 +161,7 @@ func (d reportData) DeviationStr() string {
 // clinical guard rails live in this markup as much as in the prompt.
 const reportTmplSrc = `<!doctype html>
 <meta charset="utf-8">
-<title>Lull — record for your appointment</title>
+<title>{{.Product}} &mdash; record for your appointment</title>
 <style>
   body{max-width:720px;margin:36px auto;padding:0 24px;
        font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111}
@@ -174,7 +185,7 @@ const reportTmplSrc = `<!doctype html>
   @media print{body{margin:0}.noprint{display:none}}
 </style>
 
-<h1>Lull</h1>
+<h1>{{.Product}}</h1>
 <div class="sub">Record for your appointment &middot; generated {{.Generated}}
 {{if .Simulated}}<span class="simtag">contains simulated data</span>{{end}}</div>
 
@@ -219,14 +230,14 @@ any fixed count, and earlier review where reduced movement recurs.</p>
 <table>
   <tr><td>Posture</td><td>{{.Maternal.posture}}</td></tr>
   <tr><td>Time supine</td><td>{{printf "%.0f" .Maternal.supine_minutes}} min</td></tr>
-  <tr><td>Respiration</td><td>{{printf "%.0f" .Maternal.respiration_rpm}} / min</td></tr>
+  <tr><td>Respiration</td><td>{{.RespirationStr}}</td></tr>
   <tr><td>Wake events</td><td>{{.Maternal.wake_events}}</td></tr>
   <tr><td>Snore burden</td><td>{{printf "%.1f" .Maternal.snore_percent}}%</td></tr>
 </table>
 
 <div class="note">
   <strong>What this is, and what it is not.</strong>
-  Lull is not a medical device and does not diagnose. It counts fetal movement
+  {{.Product}} is not a medical device and does not diagnose. It counts fetal movement
   passively overnight and reports change relative to this baby's own established
   pattern, rather than against a population threshold.
   <br><br>
@@ -244,3 +255,20 @@ any fixed count, and earlier review where reduced movement recurs.</p>
 `
 
 var reportTmpl = template.Must(template.New("report").Parse(reportTmplSrc))
+
+// RespirationStr renders the breathing row on the page she hands to a midwife.
+//
+// The tracker reports 0 to mean "not measured", so printing the raw figure put
+// "0 / min" on a clinical page, which reads as a patient who has stopped
+// breathing. A rate the tracker would not stand behind is not shown either:
+// this page is read as a record of the night, and a marginal estimate printed
+// in a table is indistinguishable from a measured one.
+func (d reportData) RespirationStr() string {
+	switch maternal.RespirationQuality(str(d.Maternal["respiration_quality"])) {
+	case maternal.RespMeasured:
+		return fmt.Sprintf("%.0f / min", f64(d.Maternal["respiration_rpm"]))
+	case maternal.RespProvisional:
+		return "not reliably resolved"
+	}
+	return "not measured"
+}

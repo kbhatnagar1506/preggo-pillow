@@ -37,6 +37,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kbhatnagar1506/lull/internal/brand"
 )
 
 const defaultBase = "https://app.backboard.io/api"
@@ -102,7 +104,7 @@ func New(ctx context.Context, o Options) (*Client, error) {
 		o.BaseURL = defaultBase
 	}
 	if o.Name == "" {
-		o.Name = "Lull"
+		o.Name = brand.Product
 	}
 
 	c := &Client{
@@ -388,7 +390,7 @@ func (c *Client) findOrCreateAssistant(ctx context.Context, name string) (string
 // systemPrompt encodes the one product rule that must never be broken: Lull
 // does not reassure. Reassurance is the known failure mode of home fetal
 // monitoring, because it delays women from seeking care when movement is down.
-const systemPrompt = `You hold the narrative memory of one pregnancy for Lull, a device that ` +
+const systemPrompt = `You hold the narrative memory of one pregnancy for ` + brand.Product + `, a device that ` +
 	`passively counts fetal movement overnight and compares it to this baby's own baseline.
 
 Rules you must never break:

@@ -184,3 +184,15 @@ func TestServerErrorsSurface(t *testing.T) {
 		t.Errorf("want the API's own message, got %v", err)
 	}
 }
+
+// Whoever answers this call has never heard of the codebase. They have heard
+// of the product, if they have heard of anything.
+func TestTheCallIntroducesTheProductNotTheCodebase(t *testing.T) {
+	script := Alert{To: "+15551234567", DeviationPct: 40, Nights: 2}.Script()
+	if strings.Contains(script, "Lull") {
+		t.Errorf("the call still introduces itself as Lull:\n%s", script)
+	}
+	if !strings.Contains(script, "Preggo Pillow") {
+		t.Errorf("the call does not name the product:\n%s", script)
+	}
+}

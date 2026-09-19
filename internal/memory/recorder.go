@@ -5,6 +5,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kbhatnagar1506/lull/internal/maternal"
+
+	"github.com/kbhatnagar1506/lull/internal/brand"
 )
 
 // Recorder decides what is worth remembering about this pregnancy.
@@ -50,7 +54,7 @@ func (r *Recorder) Profile(name string, gestationalWeeks int, dueDate string) {
 
 	if gestationalWeeks > 0 {
 		r.once(fmt.Sprintf("gest-%d", gestationalWeeks), fmt.Sprintf(
-			"%s is %d weeks pregnant as of %s. Monitoring with Lull began at %d weeks.",
+			"%s is %d weeks pregnant as of %s. Monitoring with "+brand.Product+" began at %d weeks.",
 			who, gestationalWeeks, time.Now().Format("2 January 2006"), gestationalWeeks),
 			map[string]any{"kind": "profile", "gestational_weeks": gestationalWeeks})
 	}
@@ -129,30 +133,48 @@ func (r *Recorder) Alert(date string, count int, baseline float64, deviationPct 
 // Maternal records her own state for the night. Posture matters on its own:
 // supine going-to-sleep position in late pregnancy carries roughly 2.6x the
 // odds of late stillbirth.
-func (r *Recorder) Maternal(date, posture string, supineMin, respRPM, snorePct float64, wakes int) {
+//
+// It takes the whole Stats rather than six loose float64s so that the rate and
+// the confidence in the rate cannot be separated on the way in. What this
+// writes is prose that a midwife reads and that semantic recall quotes back
+// months later, so a breathing rate stated here becomes a measured fact about
+// a patient. The tracker is only willing to stand behind some of the rates it
+// produces, and this asks it which.
+func (r *Recorder) Maternal(date string, ms maternal.Stats) {
 	if !r.enabled() {
 		return
 	}
 	var parts []string
-	parts = append(parts, fmt.Sprintf("she slept mostly %s", posture))
-	if supineMin >= 20 {
-		parts = append(parts, fmt.Sprintf("with %.0f minutes on her back", supineMin))
+	parts = append(parts, fmt.Sprintf("she slept mostly %s", ms.Posture))
+	if ms.SupineMinutes >= 20 {
+		parts = append(parts, fmt.Sprintf("with %.0f minutes on her back", ms.SupineMinutes))
 	}
-	if wakes > 0 {
-		parts = append(parts, fmt.Sprintf("waking %d times", wakes))
+	if ms.WakeEvents > 0 {
+		parts = append(parts, fmt.Sprintf("waking %d times", ms.WakeEvents))
 	}
-	if respRPM > 0 {
-		parts = append(parts, fmt.Sprintf("breathing around %.0f a minute", respRPM))
+	switch rpm, ok := ms.RespirationForRecord(); {
+	case ok:
+		parts = append(parts, fmt.Sprintf("breathing around %.0f a minute", rpm))
+	case ms.RespirationQuality == maternal.RespProvisional:
+		// Something oscillated, but not well enough to name a rate. Saying so
+		// is worth a clause: silence here would read as "breathing was not
+		// worth mentioning" when what happened is that the device could not
+		// resolve it. The figure itself stays in the metadata below, where it
+		// is a diagnostic and not a sentence about her.
+		parts = append(parts, "with no reliable breathing rate from the device")
 	}
-	if snorePct >= 5 {
-		parts = append(parts, fmt.Sprintf("snoring for %.0f%% of the night", snorePct))
+	if ms.SnorePercent >= 5 {
+		parts = append(parts, fmt.Sprintf("snoring for %.0f%% of the night", ms.SnorePercent))
 	}
 
 	r.c.Remember(fmt.Sprintf("On %s %s.", date, strings.Join(parts, ", ")),
 		map[string]any{
-			"kind": "maternal", "date": date, "posture": posture,
-			"supine_minutes": supineMin, "wake_events": wakes,
-			"respiration_rpm": respRPM, "snore_percent": snorePct,
+			"kind": "maternal", "date": date, "posture": ms.Posture,
+			"supine_minutes": ms.SupineMinutes, "wake_events": ms.WakeEvents,
+			"respiration_rpm": ms.RespirationRPM, "snore_percent": ms.SnorePercent,
+			// Carried so a clinician can see why the sentence above declined
+			// to quote a rate, rather than wondering whether one was taken.
+			"respiration_quality": string(ms.RespirationQuality),
 		})
 }
 

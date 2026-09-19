@@ -13,6 +13,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -77,14 +78,35 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// errNoStore is what every method returns when the Store is nil.
+//
+// Nil is a real configuration: -source phone drives the whole product with no
+// local database at all. It was not handled, so an unauthenticated request to
+// /api/press — a route the phone remote needs open — dereferenced nil and
+// panicked the handler. A missing database is a 503, not a crash.
+var errNoStore = errors.New("no database on this device")
+
+func (s *Store) ok() error {
+	if s == nil || s.db == nil {
+		return errNoStore
+	}
+	return nil
+}
+
 func ms(t time.Time) int64 { return t.UnixMilli() }
 
 func (s *Store) InsertCommand(t time.Time, strength string) error {
+	if err := s.ok(); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`INSERT INTO commands(t_ms, strength) VALUES(?,?)`, ms(t), strength)
 	return err
 }
 
 func (s *Store) InsertDetection(t time.Time, residual, confidence float64, acoustic bool) error {
+	if err := s.ok(); err != nil {
+		return err
+	}
 	a := 0
 	if acoustic {
 		a = 1
@@ -96,6 +118,9 @@ func (s *Store) InsertDetection(t time.Time, residual, confidence float64, acous
 }
 
 func (s *Store) InsertPress(t time.Time, source string) error {
+	if err := s.ok(); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`INSERT INTO presses(t_ms, source) VALUES(?,?)`, ms(t), source)
 	return err
 }
@@ -120,6 +145,9 @@ type Score struct {
 // This is the query behind the reveal slide, and it is why the two tables are
 // separate.
 func (s *Store) ScoreWindow(from, to time.Time, tolerance time.Duration) (Score, error) {
+	if err := s.ok(); err != nil {
+		return Score{}, err
+	}
 	tol := tolerance.Milliseconds()
 	sc := Score{ToleranceMS: tol}
 
@@ -178,6 +206,9 @@ type Event struct {
 
 // EventsWindow returns everything that happened in a window, for the overlay.
 func (s *Store) EventsWindow(from, to time.Time) ([]Event, error) {
+	if err := s.ok(); err != nil {
+		return nil, err
+	}
 	q := `
 SELECT t_ms, 'command'   AS kind, strength AS meta FROM commands   WHERE t_ms BETWEEN ? AND ?
 UNION ALL
@@ -211,6 +242,9 @@ type Night struct {
 }
 
 func (s *Store) UpsertNight(date string, count int, simulated bool) error {
+	if err := s.ok(); err != nil {
+		return err
+	}
 	sim := 0
 	if simulated {
 		sim = 1
@@ -223,6 +257,9 @@ ON CONFLICT(night_date) DO UPDATE SET kick_count=excluded.kick_count, simulated=
 }
 
 func (s *Store) Nights(limit int) ([]Night, error) {
+	if err := s.ok(); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(
 		`SELECT night_date, kick_count, simulated FROM nights ORDER BY night_date DESC LIMIT ?`, limit)
 	if err != nil {
@@ -250,6 +287,9 @@ func (s *Store) Nights(limit int) ([]Night, error) {
 // Baseline is the median of the prior nights, excluding the most recent.
 // Median rather than mean, because one restless night should not move the bar.
 func (s *Store) Baseline(excludeLast int) (float64, error) {
+	if err := s.ok(); err != nil {
+		return 0, err
+	}
 	nights, err := s.Nights(60)
 	if err != nil {
 		return 0, err
@@ -281,6 +321,9 @@ func (s *Store) Baseline(excludeLast int) (float64, error) {
 // local time. Used by the nightly rollup so the trend reflects real sensor
 // output rather than seeded data.
 func (s *Store) CountDetectionsOn(day string) (int, error) {
+	if err := s.ok(); err != nil {
+		return 0, err
+	}
 	t, err := time.ParseInLocation("2006-01-02", day, time.Local)
 	if err != nil {
 		return 0, err
@@ -307,6 +350,9 @@ type DetectionRow struct {
 // A watermark rather than a boolean column: it is one integer, it survives a
 // crash, and a period offline costs nothing but a larger catch-up batch.
 func (s *Store) UnsyncedDetections(limit int) ([]DetectionRow, error) {
+	if err := s.ok(); err != nil {
+		return nil, err
+	}
 	var last int64
 	_ = s.db.QueryRow(`SELECT last_id FROM sync_state WHERE name='tiger'`).Scan(&last)
 
@@ -335,6 +381,9 @@ WHERE id > ? ORDER BY id LIMIT ?`, last, limit)
 
 // MarkSynced advances the watermark, only after the remote write succeeded.
 func (s *Store) MarkSynced(lastID int64) error {
+	if err := s.ok(); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`
 INSERT INTO sync_state(name, last_id) VALUES('tiger', ?)
 ON CONFLICT(name) DO UPDATE SET last_id=excluded.last_id`, lastID)

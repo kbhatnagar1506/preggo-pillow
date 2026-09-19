@@ -258,3 +258,129 @@ func TestMaternalVitalsOmittedWhenAbsent(t *testing.T) {
 		t.Errorf("absent vitals should be omitted, got %s", b)
 	}
 }
+
+// ---- respiration the tracker will not stand behind -------------------------
+
+// The prompt is a request; this is the guarantee. A rate the tracker calls
+// provisional or unmeasured never reaches the model, so the model cannot
+// narrate it however it is asked.
+func TestUnreliableRespirationNeverReachesTheModel(t *testing.T) {
+	for _, q := range []string{"provisional", "unmeasured", ""} {
+		in := Input{Tonight: 198, Baseline: 338, RespirationRPM: 6, RespirationQuality: q}
+		b, err := json.Marshal(in.withoutUnreliableRespiration())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "respiration_rpm") {
+			t.Errorf("quality %q sent a rate to the model: %s", q, b)
+		}
+	}
+}
+
+// The control: a measured rate still travels, with its quality attached so the
+// note can caveat it correctly.
+func TestMeasuredRespirationStillReachesTheModel(t *testing.T) {
+	in := Input{Tonight: 198, Baseline: 338, RespirationRPM: 14, RespirationQuality: RespirationMeasured}
+	b, _ := json.Marshal(in.withoutUnreliableRespiration())
+	for _, want := range []string{`"respiration_rpm":14`, `"respiration_quality":"measured"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("payload missing %s: %s", want, b)
+		}
+	}
+}
+
+// Checked over the wire, because the failure that matters is Summarize
+// forgetting to apply the filter, not the filter being wrong.
+func TestSummarizeStripsUnreliableRespirationOnTheWire(t *testing.T) {
+	got := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		select {
+		case got <- string(body):
+		default:
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"note"}}]}`))
+	}))
+	defer srv.Close()
+
+	s := New(Options{BaseURL: srv.URL, APIKey: "test-key"})
+	in := sample()
+	in.RespirationRPM = 6
+	in.RespirationQuality = "provisional"
+	if _, err := s.Summarize(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only the user message, not the whole request: the system prompt names
+	// respiration_rpm in the rule forbidding an invented rate, so searching
+	// the raw body would match the prompt and never the data.
+	data := userMessage(t, <-got)
+	if strings.Contains(data, "respiration_rpm") {
+		t.Errorf("Summarize sent a provisional rate to the model: %s", data)
+	}
+	if !strings.Contains(data, "respiration_quality") {
+		t.Errorf("Summarize dropped the quality, so the note cannot say the rate was unresolved: %s", data)
+	}
+}
+
+// userMessage pulls the monitoring-data message out of a chat completion
+// request, which is the only part of the payload carrying her numbers.
+func userMessage(t *testing.T, body string) string {
+	t.Helper()
+	var req struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("request body is not a chat completion: %v", err)
+	}
+	for _, m := range req.Messages {
+		if m.Role == "user" {
+			return m.Content
+		}
+	}
+	t.Fatal("no user message in the request")
+	return ""
+}
+
+// The control: a measured rate does reach the model, through the same path.
+func TestSummarizeSendsAMeasuredRespirationOnTheWire(t *testing.T) {
+	got := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		select {
+		case got <- string(body):
+		default:
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"note"}}]}`))
+	}))
+	defer srv.Close()
+
+	s := New(Options{BaseURL: srv.URL, APIKey: "test-key"})
+	in := sample()
+	in.RespirationRPM = 14
+	in.RespirationQuality = RespirationMeasured
+	if _, err := s.Summarize(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+	if data := userMessage(t, <-got); !strings.Contains(data, `"respiration_rpm":14`) {
+		t.Errorf("a measured rate was withheld from the model: %s", data)
+	}
+}
+
+// An absent rate is an absent measurement. A model that reads the gap as
+// bradypnoea would turn a dropout into an emergency in a clinician's note,
+// which is the same failure this whole change exists to prevent.
+func TestPromptForbidsInventingABreathingRate(t *testing.T) {
+	for _, needle := range []string{
+		"NEVER INVENT A BREATHING RATE",
+		`respiration_quality is "provisional" or "unmeasured"`,
+		"a missing number is a missing measurement, not bradypnoea",
+	} {
+		if !strings.Contains(systemPrompt, needle) {
+			t.Errorf("prompt is missing %q", needle)
+		}
+	}
+}
