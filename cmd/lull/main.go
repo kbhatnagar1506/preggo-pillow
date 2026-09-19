@@ -50,6 +50,11 @@ func main() {
 		buses = flag.String("buses", "abdo_a=1,abdo_b=3,ref=4",
 			"accelerometer I2C buses as node=busnumber (one bus each: identical "+
 				"chips share an address and would collide)")
+		replayPath  = flag.String("replay", "", "replay a recorded trace instead of live sensors — the demo fallback")
+		replaySpeed = flag.Float64("replay-speed", 1, "playback speed; 60 puts an hour of night into a minute")
+		replayLoop  = flag.Bool("replay-loop", true, "restart the trace when it ends")
+		recordPath  = flag.String("record", "", "write every reading to this file, so tonight becomes tomorrow's fallback")
+
 		knobEnable  = flag.Bool("knob", false, "read a Grove rotary angle sensor as the human \"I felt it\" tally")
 		knobBus     = flag.Int("knob-bus", 1, "I2C bus the Grove Base HAT ADC is on")
 		knobChannel = flag.Int("knob-channel", -1, "ADC channel the dial is on; -1 finds it by asking you to turn it")
@@ -173,6 +178,39 @@ func main() {
 		// scale is nothing like the simulator's.
 		defaultAcoustic = 60.0
 
+	case "replay":
+		if *replayPath == "" {
+			log.Fatalf(`-source replay needs -replay <file>`)
+		}
+		tr, err := sensor.LoadTrace(*replayPath)
+		if err != nil {
+			log.Fatalf("replay: %v", err)
+		}
+		// Refuse a trace with no reference node. Without it there is nothing to
+		// subtract, so maternal movement would be counted as fetal — and a
+		// fallback that quietly reports wrong numbers is worse than no fallback.
+		var hasRef bool
+		for _, n := range tr.Nodes() {
+			if n == sensor.NodeRef {
+				hasRef = true
+			}
+		}
+		if !hasRef {
+			log.Fatalf("replay: %s has no reference node (has %v) — reference "+
+				"subtraction is impossible and maternal movement would be counted "+
+				"as fetal", *replayPath, tr.Nodes())
+		}
+		log.Printf("sensor source: REPLAY of %s", *replayPath)
+		log.Printf("  %d readings, %v of recording, nodes %v, %.0fx speed, loop=%v",
+			len(tr.Readings), tr.Duration().Round(time.Second), tr.Nodes(), *replaySpeed, *replayLoop)
+		src = sensor.NewReplaySource(tr, *replaySpeed, *replayLoop)
+		servo = nil
+		fool = nil
+		if *requireAcoustic && len(tr.Acoustics) == 0 {
+			log.Printf("  trace has no acoustic samples: disabling the acoustic gate")
+			*requireAcoustic = false
+		}
+
 	case "i2c":
 		log.Printf("sensor source: I2C on the Pi")
 		s, sv, clean, err := hardwareSource(*buses, *sampleHz, *motorBus, uint8(*motorAddr))
@@ -218,6 +256,19 @@ func main() {
 		log.Fatalf("unknown -source %q", *source)
 	}
 	defer src.Close()
+
+	// Recording tees the live source to a file. Doing it here rather than
+	// inside each source means every path — sim, serial, phone, i2c — can be
+	// recorded with the same flag.
+	if *recordPath != "" {
+		tw, err := sensor.NewTraceWriter(*recordPath)
+		if err != nil {
+			log.Fatalf("record: %v", err)
+		}
+		defer tw.Close()
+		src = sensor.NewRecorder(src, tw)
+		log.Printf("recording every reading to %s", *recordPath)
+	}
 
 	// --- maternal metrics ----------------------------------------------
 	// The override argument is "every maternal number is normal and the baby

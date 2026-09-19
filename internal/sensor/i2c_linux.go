@@ -200,14 +200,18 @@ func NewI2CSource(nodes []*I2CNode, sampleHz int) *I2CSource {
 func (s *I2CSource) Readings() <-chan Reading   { return s.readings }
 func (s *I2CSource) Acoustics() <-chan Acoustic { return s.acoustic }
 
+// Close is idempotent: the channel closes must sit INSIDE the Once, or a
+// second call panics on an already-closed channel.
 func (s *I2CSource) Close() error {
-	s.once.Do(func() { close(s.stop) })
-	s.wg.Wait()
-	close(s.readings)
-	close(s.acoustic)
-	for _, n := range s.nodes {
-		_ = n.Bus.Close()
-	}
+	s.once.Do(func() {
+		close(s.stop)
+		s.wg.Wait()
+		close(s.readings)
+		close(s.acoustic)
+		for _, n := range s.nodes {
+			_ = n.Bus.Close()
+		}
+	})
 	return nil
 }
 

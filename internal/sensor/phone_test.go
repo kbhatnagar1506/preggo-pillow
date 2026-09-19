@@ -278,3 +278,15 @@ func TestPhyphoxResponseShapeMatchesDocumentedAPI(t *testing.T) {
 		t.Error("decoded the documented example incorrectly")
 	}
 }
+
+// main defers Close on the source, and other paths can close it too. Closing an
+// already-closed channel panics, so Close must be idempotent.
+func TestPhoneSourceCloseIsIdempotent(t *testing.T) {
+	s := NewPhoneSource([]Phone{{Node: NodeRef, Host: "127.0.0.1:1"}}, 50)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("second Close returned %v", err)
+	}
+}

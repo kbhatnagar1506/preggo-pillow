@@ -152,11 +152,15 @@ func (s *PhoneSource) setErr(n Node, msg string) {
 	s.mu.Unlock()
 }
 
+// Close is idempotent: the channel closes must sit INSIDE the Once, or a
+// second call panics on an already-closed channel.
 func (s *PhoneSource) Close() error {
-	s.once.Do(func() { close(s.stop) })
-	s.wg.Wait()
-	close(s.readings)
-	close(s.acoustic)
+	s.once.Do(func() {
+		close(s.stop)
+		s.wg.Wait()
+		close(s.readings)
+		close(s.acoustic)
+	})
 	return nil
 }
 
