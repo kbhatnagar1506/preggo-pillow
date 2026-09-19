@@ -34,7 +34,7 @@ type Detector struct {
 	Jitter int
 
 	settled int  // where the dial rested when the last event fired
-	have    bool // settled is valid
+	have    bool // settled is valid: the dial has sat still once
 	moving  bool
 
 	// refVal is the last reading that differed meaningfully from its
@@ -59,9 +59,19 @@ func New() *Detector {
 
 // Feed supplies one reading. It reports true exactly once per completed turn.
 func (d *Detector) Feed(t time.Time, mv int) bool {
+	// Until the dial has sat still once, there is no resting position to
+	// measure against. Taking the very first sample as "rest" means the ADC's
+	// own settling drift reads as a deliberate turn and fires a mark before
+	// anyone has touched anything — which inflates the human count, the one
+	// number the whole comparison rests on.
 	if !d.have {
-		d.settled, d.have = mv, true
-		d.refVal, d.refTime = mv, t
+		if d.refTime.IsZero() || abs(mv-d.refVal) > d.Jitter {
+			d.refVal, d.refTime = mv, t
+			return false
+		}
+		if t.Sub(d.refTime) >= d.Quiet {
+			d.settled, d.have = mv, true
+		}
 		return false
 	}
 

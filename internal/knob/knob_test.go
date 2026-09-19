@@ -148,3 +148,32 @@ func TestWorksFromEitherEndOfTravel(t *testing.T) {
 		}
 	}
 }
+
+// The dial must sit still once before anything counts. Taking the first sample
+// as "rest" means the ADC's own settling drift fires a mark before a person has
+// touched anything — and a phantom mark inflates the human count, which is the
+// number the whole three-way comparison rests on.
+func TestStartupDriftDoesNotCount(t *testing.T) {
+	d := New()
+	var v []int
+	// ADC coming up: wanders across most of its range for ~300ms.
+	v = append(v, 400, 900, 1500, 2300, 1800, 2600, 2000, 2400, 2200, 2250)
+	// then it settles
+	v = append(v, hold(2250, 80)...)
+	if n := feed(d, 100, v); n != 0 {
+		t.Errorf("startup drift produced %d marks, want 0", n)
+	}
+}
+
+// And after settling, a real turn must still register.
+func TestTurnAfterSettlingStillCounts(t *testing.T) {
+	d := New()
+	var v []int
+	v = append(v, 400, 1500, 2300, 1800, 2250) // noisy start
+	v = append(v, hold(2250, 60)...)           // settles
+	v = append(v, ramp(2250, 1200, 50)...)     // a real turn
+	v = append(v, hold(1200, 60)...)
+	if n := feed(d, 100, v); n != 1 {
+		t.Errorf("want 1 mark after settling, got %d", n)
+	}
+}
