@@ -120,7 +120,10 @@
         <div class="vital" id="v-resp"><div class="k">Respiration</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
         <div class="vital" id="v-snore"><div class="k">Snore burden</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
         <div class="vital" id="v-supine"><div class="k">Posture</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
+        <div class="vital" id="v-pulse"><div class="k">Pulse</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
+        <div class="vital" id="v-breath"><div class="k">Breathing rate</div><div class="v">&mdash;</div><div class="s">&nbsp;</div></div>
       </div>
+      <div class="footnote" id="vitals-src" hidden></div>
       <div class="footnote">
         Computed live from the reference sensor on her back. Every maternal metric
         is normal &mdash; placental insufficiency produces no maternal symptoms, which
@@ -292,10 +295,44 @@ async function refreshMaternal(){
     return;
   }
   set('v-wake',   d.wake_events + ' wakes',                'normal');
-  set('v-resp',   Math.round(d.respiration_rpm) + ' /min', 'normal');
+  // The tracker reports 0 to mean "could not resolve a rate", not "no
+  // breathing". Rendering that as "0 /min - normal" is worse than saying
+  // nothing: it is a vital sign reported as reassuring when it is absent.
+  set('v-resp',   d.respiration_rpm > 0 ? Math.round(d.respiration_rpm) + ' /min' : '\u2014',
+                  d.respiration_rpm > 0 ? 'normal' : 'not resolved');
   set('v-snore',  d.snore_percent.toFixed(1) + '%',        'normal');
   set('v-supine', d.posture,
       d.posture === 'supine' ? Math.round(d.supine_minutes) + ' min on her back' : 'off her back');
+}
+
+/* ---------- contactless vitals, when an instrument measured them ----------
+   Pulse and breathing here come from a camera, not the accelerometer. The
+   source is shown because it decides whether the figures carry a caveat: an
+   FDA-cleared measurement does not, a derived one does. Reporting the number
+   without its provenance would quietly launder that distinction away. */
+async function refreshVitals(){
+  let d;
+  try { d = await (await fetch('/api/vitals')).json(); } catch (e) { return; }
+  const set = (id, val, status) => {
+    const el = $(id);
+    el.querySelector('.v').textContent = val;
+    el.querySelector('.s').textContent = status;
+  };
+  const src = $('vitals-src');
+  if (!d || d.available === false){
+    set('v-pulse',  '\u2014', 'no camera');
+    set('v-breath', '\u2014', 'no camera');
+    src.hidden = true;
+    return;
+  }
+  const tag = d.cleared ? 'FDA-cleared' : d.source;
+  const state = v => v ? (d.normal ? 'normal \u00b7 ' + tag : 'outside range \u00b7 ' + tag) : 'no reading';
+  set('v-pulse',  d.pulse_bpm     ? Math.round(d.pulse_bpm) + ' bpm'      : '\u2014', state(d.pulse_bpm));
+  set('v-breath', d.breathing_rpm ? Math.round(d.breathing_rpm) + ' /min' : '\u2014', state(d.breathing_rpm));
+  src.hidden = false;
+  src.textContent = 'Pulse and breathing measured contactlessly from ' + d.source + ' \u2014 ' +
+    d.accuracy + '. These are the mother\u2019s, not the baby\u2019s: the control that separates ' +
+    'a change in the baby from a change in her.';
 }
 
 /* ---------- nightly trend + verdict ---------- */
@@ -388,8 +425,10 @@ function drawTrend(nights, baseline){
 drawTrace();
 refreshNights();
 refreshMaternal();
+refreshVitals();
 setInterval(refreshNights, 5000);
 setInterval(refreshMaternal, 2000);
+setInterval(refreshVitals, 3000);
 addEventListener('resize', () => refreshNights());
 </script>
 </body>

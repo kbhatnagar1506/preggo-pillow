@@ -200,3 +200,61 @@ func max0(v int) int {
 	}
 	return v
 }
+
+// Maternal vitals are the control arm: "her numbers are normal AND the baby
+// moved less" is far stronger than either half alone. The prompt has to say how
+// to use them, and — crucially — how not to.
+func TestPromptUsesMaternalVitalsAsAControl(t *testing.T) {
+	for _, needle := range []string{
+		"USE THE MATERNAL VITALS AS A CONTROL",
+		"distinguishes a change in the baby from a change in the mother",
+		"fda_cleared is true",
+		"must NOT be hedged",
+		"Never present maternal vitals as evidence the baby is well",
+	} {
+		if !strings.Contains(systemPrompt, needle) {
+			t.Errorf("prompt is missing %q", needle)
+		}
+	}
+}
+
+// An FDA-cleared figure must not carry the accelerometer's caveat, and an
+// accelerometer figure must. Laundering the caveat off the weak one, or bolting
+// it onto the strong one, both mislead the reader.
+func TestPromptDistinguishesClearedFromDerived(t *testing.T) {
+	i := strings.Index(systemPrompt, "plus or minus twenty percent")
+	if i < 0 {
+		t.Fatal("the accelerometer caveat has gone")
+	}
+	if !strings.Contains(systemPrompt, "Respiration derived from the accelerometer") {
+		t.Error("the caveat must be scoped to the accelerometer, not to all vitals")
+	}
+}
+
+func TestMaternalVitalsSerialiseIntoTheInput(t *testing.T) {
+	in := Input{
+		Tonight: 41, Baseline: 70,
+		MaternalVitals: &MaternalVitals{
+			PulseBPM: 74, BreathingRPM: 15, Source: "presage",
+			Cleared: true, Accuracy: "RMSE 1.32 bpm", Normal: true,
+		},
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"maternal_vitals"`, `"fda_cleared":true`, `"within_normal_range":true`, `"pulse_bpm":74`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("payload missing %s: %s", want, b)
+		}
+	}
+}
+
+// With no vitals the key must be absent entirely, not present and empty — an
+// empty object would invite the model to describe vitals it never received.
+func TestMaternalVitalsOmittedWhenAbsent(t *testing.T) {
+	b, _ := json.Marshal(Input{Tonight: 41})
+	if strings.Contains(string(b), "maternal_vitals") {
+		t.Errorf("absent vitals should be omitted, got %s", b)
+	}
+}

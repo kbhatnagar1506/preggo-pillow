@@ -92,6 +92,23 @@ type Input struct {
 	SnorePercent   float64      `json:"snore_percent"`
 	WakeEvents     int          `json:"wake_events"`
 	Alert          bool         `json:"alert"`
+
+	// Contactless maternal vitals, where an instrument measured them. This is
+	// the control arm of the whole argument: "her numbers are normal AND the
+	// baby moved less" is a far stronger statement than either half alone.
+	MaternalVitals *MaternalVitals `json:"maternal_vitals,omitempty"`
+}
+
+// MaternalVitals carries the measurement AND how it was measured, because the
+// note must qualify a +/-20% accelerometer estimate and must not qualify an
+// FDA-cleared one.
+type MaternalVitals struct {
+	PulseBPM     float64 `json:"pulse_bpm,omitempty"`
+	BreathingRPM float64 `json:"breathing_rpm,omitempty"`
+	Source       string  `json:"source"`
+	Cleared      bool    `json:"fda_cleared"`
+	Accuracy     string  `json:"accuracy"`
+	Normal       bool    `json:"within_normal_range"`
 }
 
 type NightPoint struct {
@@ -146,8 +163,16 @@ Hard rules, each from the guideline:
   reduced fetal movements are uncomplicated. State the observation and the recommendation without
   alarm; the point is to prompt contact, not fear.
 
-- STATE THE DEVICE'S LIMITS where relevant: counts are estimates from an accelerometer and contact
-  microphone, and respiration is accurate to roughly plus or minus twenty percent.
+- STATE THE DEVICE'S LIMITS where relevant: movement counts are estimates from accelerometers.
+  Respiration derived from the accelerometer is accurate to roughly plus or minus twenty percent
+  and must be qualified as such.
+
+- USE THE MATERNAL VITALS AS A CONTROL, when maternal_vitals is present. If her pulse and breathing
+  are within normal range while movement is below baseline, say so explicitly in one clause: it
+  distinguishes a change in the baby from a change in the mother, and it is the single most useful
+  thing in the note. When fda_cleared is true the figures are from an FDA-cleared instrument and
+  must NOT be hedged with the plus-or-minus-twenty-percent caveat; when it is false they must be.
+  Never present maternal vitals as evidence the baby is well — they say nothing about the baby.
 
 Style: three or four sentences, plain clinical English, no bullet points, no headings, no preamble.
 Lead with the movement trend.`

@@ -71,6 +71,19 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 			pts = append(pts, clinical.NightPoint{Date: n.Date, Count: n.KickCount})
 		}
 		m := s.maternalStats()
+		// Attach measured maternal vitals when we have them. This is what lets
+		// the note say "her numbers are normal AND the baby moved less" — the
+		// control that separates a change in the baby from a change in her.
+		var mv *clinical.MaternalVitals
+		if s.Vitals != nil {
+			if sum, ok := s.Vitals.Summarise(12 * time.Hour); ok {
+				mv = &clinical.MaternalVitals{
+					PulseBPM: sum.PulseBPM, BreathingRPM: sum.BreathingRPM,
+					Source: string(sum.Source), Cleared: sum.Cleared,
+					Accuracy: sum.Accuracy, Normal: sum.Normal,
+				}
+			}
+		}
 		cctx, ccancel := context.WithTimeout(r.Context(), 60*time.Second)
 		n, err := s.Clinical.Summarize(cctx, clinical.Input{
 			Nights: pts, Baseline: baseline, Tonight: latest.KickCount,
@@ -81,6 +94,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 			SnorePercent:   f64(m["snore_percent"]),
 			WakeEvents:     int(f64(m["wake_events"])),
 			Alert:          alert,
+			MaternalVitals: mv,
 		})
 		ccancel()
 		if err != nil {
