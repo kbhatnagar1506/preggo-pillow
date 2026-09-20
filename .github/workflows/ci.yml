@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # -race matters more here than in most projects: the detector, the SSE
+      # hub and the sensor sources all run concurrently, and three real bugs
+      # in this repository were races.
+      - name: test
+        run: go test ./... -race
+
+      # The product ships as one cross-compiled binary to a Raspberry Pi. If
+      # that stops working, it stops working silently until demo day.
+      - name: cross-compile for the Pi
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: 0
+        run: go build -o /dev/null ./cmd/lull

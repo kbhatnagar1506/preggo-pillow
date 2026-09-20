@@ -1,7 +1,14 @@
 # Preggo Pillow
 
+[![CI](https://github.com/kbhatnagar1506/preggo-pillow/actions/workflows/ci.yml/badge.svg)](https://github.com/kbhatnagar1506/preggo-pillow/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Tests](https://img.shields.io/badge/tests-304%20under%20--race-success)](#tests)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 **A pregnancy pillow that counts your baby's movement overnight and tells you when
 tonight is different from your baby's own normal.**
+
+> 🏆 **First place** and the **Presage track** at HackHers, Georgia State University, September 2026.
 
 Reduced fetal movement is one of the earliest warnings that something is wrong.
 The advice given to pregnant women is to count kicks — but the clinical guideline
@@ -260,6 +267,9 @@ site/               the same landing page, standalone, for Vercel
 tools/presage-bridge  runs the Presage SDK and POSTs /api/vitals
 arduino/            the original serial sensor sketch
 docs/HARDWARE.md    the full hardware log
+docs/SENSORS-AND-METHODS.md  every sensor, algorithm and source, and what is absent
+CONTRIBUTING.md     how to run it, and the one rule
+SECURITY.md         the threat model, and how to run it safely
 ```
 
 `internal/brand` holds one constant, and it exists because of a real bug. The

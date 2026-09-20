@@ -82,12 +82,12 @@ func New(o Options) *Summarizer {
 // free text, no notes. The narrative lives in Backboard, and health data should
 // not travel further than the job requires.
 type Input struct {
-	Nights         []NightPoint `json:"nights"`
-	Baseline       float64      `json:"baseline"`
-	Tonight        int          `json:"tonight"`
-	DeviationPct   float64      `json:"deviation_percent"`
-	Posture       string  `json:"posture"`
-	SupineMinutes float64 `json:"supine_minutes"`
+	Nights        []NightPoint `json:"nights"`
+	Baseline      float64      `json:"baseline"`
+	Tonight       int          `json:"tonight"`
+	DeviationPct  float64      `json:"deviation_percent"`
+	Posture       string       `json:"posture"`
+	SupineMinutes float64      `json:"supine_minutes"`
 
 	// RespirationRPM is omitted unless RespirationQuality says the tracker
 	// stands behind it. See withoutUnreliableRespiration.
