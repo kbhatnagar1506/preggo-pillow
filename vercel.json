@@ -29,32 +29,32 @@
   "redirects": [
     {
       "source": "/dashboard",
-      "destination": "https://35.232.223.194.nip.io/dashboard",
+      "destination": "https://github.com/kbhatnagar1506/preggo-pillow",
       "permanent": false
     },
     {
       "source": "/history",
-      "destination": "https://35.232.223.194.nip.io/history",
+      "destination": "https://github.com/kbhatnagar1506/preggo-pillow",
       "permanent": false
     },
     {
       "source": "/healthcare",
-      "destination": "https://35.232.223.194.nip.io/healthcare",
+      "destination": "https://github.com/kbhatnagar1506/preggo-pillow",
       "permanent": false
     },
     {
       "source": "/medications",
-      "destination": "https://35.232.223.194.nip.io/medications",
+      "destination": "https://github.com/kbhatnagar1506/preggo-pillow",
       "permanent": false
     },
     {
       "source": "/settings",
-      "destination": "https://35.232.223.194.nip.io/settings",
+      "destination": "https://github.com/kbhatnagar1506/preggo-pillow",
       "permanent": false
     },
     {
       "source": "/report",
-      "destination": "https://35.232.223.194.nip.io/report",
+      "destination": "https://github.com/kbhatnagar1506/preggo-pillow",
       "permanent": false
     }
   ]
